@@ -1,0 +1,3279 @@
+<meta name="viewport" content="width=device-width, initial-scale=1.0, 
+user-scalable=no">
+<html>
+
+<head>
+  <style type="text/css">
+    * {
+      font-family: Lucida Sans Typewriter, Lucida Console, monaco, Bitstream Vera Sans Mono, monospace;
+      font-weight: bold;
+      font-size: 12px;
+      color: #fff;
+    }
+
+    body,
+    html {
+      position: absolute;
+      height: 100%;
+      width: 100%;
+      margin: 0px 0px 0px 0px;
+      padding: 0px 0px 0px 0px;
+      /* cursor: none; */
+      background-color: #000;
+      overflow: hidden;
+    }
+
+    #projectiles-context {
+      display: none;
+    }
+
+    #gravity-context {
+      display: none;
+    }
+
+    #minimap-context {
+      display: block;
+      position: absolute;
+      z-index: 99 !important;
+      width: auto;
+      height: 25%;
+      bottom: 0px;
+      right: 0px;
+    }
+
+    textarea {
+      position: relative;
+      width: 95% !important;
+      height: 25vh !important;
+      color: #fff !important;
+      z-index: 0 !important;
+      background-color: rgba(0, 0, 0, 0);
+    }
+
+    input {
+      border: 1px solid #fff !important;
+      color: #fff;
+      background-color: rgba(0, 0, 0, 0);
+      width: 95% !important;
+    }
+
+    button {
+      z-index: 1 !important;
+      background-color: #000;
+    }
+
+    #output-context {
+      width: 100%;
+      height: 100%;
+    }
+
+    .container {
+      text-align: center;
+      position: absolute;
+      top: 0%;
+      width: calc(100%-2px) !important;
+      right: 64px;
+      height: auto !important;
+      background-color: rgba(0, 0, 0, .25) !important;
+      border-radius: 10px;
+      border: 2px solid white;
+      cursor: default;
+
+    }
+
+    .centered {
+      position: fixed;
+      width: 100%;
+      left: 0px;
+      text-align: center;
+      padding: 16px, 16px 16px 16px;
+    }
+
+    label.hamburger {
+      display: block;
+      width: 40px;
+      height: 55px;
+      position: relative;
+      cursor: pointer;
+      z-index: 2;
+    }
+
+    input#hamburger {
+      display: none
+    }
+
+    .line {
+      position: absolute;
+      height: 6px;
+      width: 100%;
+      background: #fff;
+      transition: 0.5s;
+    }
+
+    /* steps of 12 are optional, could also be 10, 13 etc */
+    .line:nth-child(1) {
+      top: 12px;
+    }
+
+    .line:nth-child(2) {
+      top: 24px;
+    }
+
+    .line:nth-child(3) {
+      top: 36px;
+    }
+
+    /* translateY must be same as */
+    #hamburger:checked+.hamburger .line:nth-child(1) {
+      transform: translateY(12px) rotate(-45deg);
+    }
+
+    #hamburger:checked+.hamburger .line:nth-child(2) {
+      opacity: 0;
+    }
+
+    #hamburger:checked+.hamburger .line:nth-child(3) {
+      transform: translateY(-12px) rotate(45deg);
+    }
+
+    .minimize_button {
+      text-align: left;
+      border: 1px solid #fff;
+      padding: 4px 4px 4px 4px;
+    }
+
+    #listing>* {
+      display: inline-block;
+      width: 22.5%;
+    }
+
+    #death-indicator {
+      font-size: 32px;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-shadow: 1px 1px 2px red, 0 0 1em red, 0 0 0.2em red;
+      ;
+    }
+  </style>
+  <script type="text/javascript" src="js/pipeline.js"></script>
+  <script type="text/javascript" src="js/matrix.js"></script>
+  <script type="text/javascript" src="js/lame.all.js"></script>
+  <script type="text/javascript">
+
+    var pipeline_json = ({
+      "contexts": [
+        {
+          "name": `gravity-context`,
+          "width": {
+            "type": `EXACT`,
+            "value": () => {
+              return 256
+            }
+          },
+          "height": {
+            "type": `EXACT`,
+            "value": () => {
+              return 256
+            }
+          },
+          "depth_test": false
+        },
+        {
+          "name": `projectiles-context`,
+          "width": {
+            "type": `EXACT`,
+            "value": () => {
+              return 1024
+            }
+          },
+          "height": {
+            "type": `EXACT`,
+            "value": () => {
+              return 1024
+            }
+          },
+          "depth_test": false
+        },
+        {
+          "name": `output-context`,
+          "width": {
+            "type": `SCREEN_SIZE`
+          },
+          "height": {
+            "type": `SCREEN_SIZE`
+          },
+          "depth_test": false
+        }
+      ],
+      "programs": [
+        {
+          "name": `fade-program`,
+          "uniforms": [
+            {
+              "type": `SAMPLER_TWO_D`,
+              "value": () => {
+                const context = pipeline.getContext("projectiles-context");
+                const gl = context.gl;
+                const image = pipeline.getContext("projectiles-context").canvas
+                if (!context.projectiles_texture) context.projectiles_texture = gl.createTexture();
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, context.projectiles_texture);
+                const level = 0;
+                const internalFormat = gl.RGBA;
+                const srcFormat = gl.RGBA;
+                const srcType = gl.UNSIGNED_BYTE;
+
+                if (image) gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, srcFormat, srcType, image);
+                //gl.clear(gl.COLOR_BUFFER_BIT);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+                return 0;
+              },
+              "name": `projectiles_texture`
+            }
+          ],
+          "fragment": `precision highp float;
+precision highp int;
+
+#define UNIFORM_INSERTION_POINT
+
+utility_macros
+
+varying vec4 vPosition;
+
+void main()
+{
+  vec2 uv = vPosition.xy;
+  vec4 texColor = texture2D(projectiles_texture, vec2(uv.x, 1.-uv.y));
+
+  gl_FragColor = texColor-1./16.;
+}`,
+          "vertex": `precision highp float;
+precision highp int;
+
+#define UNIFORM_INSERTION_POINT
+
+attribute highp vec4 vertex; 
+
+varying vec4 vPosition;
+
+
+#define rotatePoint(p,n,theta) (p*cos(theta)+cross(n,p)*sin(theta)+n*dot(p,n) *(1.0-cos(theta)))
+
+void main(void) {
+    vPosition = vec4(vertex.xyzw);
+    gl_Position = vec4(vertex.xy*2.-1., 0., 1.);
+}
+`,
+          "dynamics": [
+            {
+              "value": () => {
+                return utility_macros
+              },
+              "name": `utility_macros`
+            }
+          ]
+        },
+        {
+          "dynamics": [
+            {
+              "value": () => {
+                return new Number(state.grid_scalar).toFixed(3);
+              },
+              "name": `grid_scalar`
+            },
+            {
+              "value": () => {
+                return new Number(state.horizontal_gravity_scalar).toFixed(3);
+              },
+              "name": `horizontal_gravity_scalar`
+            },
+            {
+              "value": () => {
+                return utility_macros
+              },
+              "name": `utility_macros`
+            }
+          ],
+          "uniforms": [
+            {
+              "type": `MAT_FOUR`,
+              "value": () => {
+                const positions = state.planets.slice(0., 4.).map(p => [p.position[0], p.position[1], p.position[2], p.position[3]]);
+
+                while (positions.length < 4) positions.push([state.grid_scalar, state.grid_scalar, state.grid_scalar, 0]);
+                return positions.flat();
+              },
+              "name": `planetsMatrixA`
+            },
+            {
+              "type": `MAT_FOUR`,
+              "value": () => {
+                const positions = state.planets.slice(4., 8.).map(p => [p.position[0], p.position[1], p.position[2], p.position[3]])
+
+                while (positions.length < 4) positions.push([state.grid_scalar, state.grid_scalar, state.grid_scalar, 0]);
+
+                return positions.flat();
+              },
+              "name": `planetsMatrixB`
+            },
+            {
+              "type": `FLOAT`,
+              "value": () => {
+                return state.supernova
+              },
+              "name": `supernova`
+            },
+            {
+              "type": `FLOAT`,
+              "value": () => {
+                return state.current_time
+              },
+              "name": `time`
+            }
+          ],
+          "fragment": `precision highp float;
+precision highp int;
+
+#define UNIFORM_INSERTION_POINT
+varying vec2 vUV;
+utility_macros
+
+mat4 planetsA = planetsMatrixA;
+mat4 planetsB = planetsMatrixB;
+
+float gravity_distance(vec3 p) {
+    float d = 0.;
+    float dist = 0.;
+
+
+    //Exponential gracvitational decay by radius is visually.... ugly.. so, not used!
+     /*
+dist = length(p.xz-planetsA[0].xz) / horizontal_gravity_scalar / grid_scalar+planetsA[0].w;
+d += 1./dist/dist * planetsA[0].w;
+dist = length(p.xz-planetsA[1].xz) / horizontal_gravity_scalar / grid_scalar+planetsA[1].w;
+d += 1./dist/dist * planetsA[1].w;
+dist = length(p.xz-planetsA[2].xz) / horizontal_gravity_scalar / grid_scalar+planetsA[2].w;
+d += 1./dist/dist * planetsA[2].w;
+dist = length(p.xz-planetsA[3].xz) / horizontal_gravity_scalar / grid_scalar+planetsA[3].w;
+d += 1./dist/dist * planetsA[3].w;
+
+dist = length(p.xz-planetsB[0].xz) / horizontal_gravity_scalar / grid_scalar+planetsB[0].w;
+d += 1./dist/dist * planetsB[0].w;
+dist = length(p.xz-planetsB[1].xz) / horizontal_gravity_scalar / grid_scalar+planetsB[1].w;
+d += 1./dist/dist * planetsB[1].w;
+dist = length(p.xz-planetsB[2].xz) / horizontal_gravity_scalar / grid_scalar+planetsB[2].w;
+d += 1./dist/dist * planetsB[2].w;
+dist = length(p.xz-planetsB[3].xz) / horizontal_gravity_scalar / grid_scalar+planetsB[3].w;
+d += 1./dist/dist * planetsB[3].w;
+    */
+
+
+    dist = min(length(p.xz-planetsA[0].xz) / horizontal_gravity_scalar/planetsA[0].w / grid_scalar, 1.);
+    d += (cos(dist * PI) * .5 + .5) * planetsA[0].w;
+
+    dist = min(length(p.xz-planetsA[1].xz) / horizontal_gravity_scalar/planetsA[1].w / grid_scalar, 1.);
+    d += (cos(dist * PI) * .5 + .5) * planetsA[1].w;
+
+    dist = min(length(p.xz-planetsA[2].xz) / horizontal_gravity_scalar/planetsA[2].w / grid_scalar, 1.);
+    d += (cos(dist * PI) * .5 + .5) * planetsA[2].w;
+
+    dist = min(length(p.xz-planetsA[3].xz) / horizontal_gravity_scalar/planetsA[3].w / grid_scalar, 1.);
+    d += (cos(dist * PI) * .5 + .5) * planetsA[3].w;
+
+    dist = min(length(p.xz-planetsB[0].xz) / horizontal_gravity_scalar/planetsB[0].w / grid_scalar, 1.);
+    d += (cos(dist * PI) * .5 + .5) * planetsB[0].w;
+
+    dist = min(length(p.xz-planetsB[1].xz) / horizontal_gravity_scalar/planetsB[1].w / grid_scalar, 1.);
+    d += (cos(dist * PI) * .5 + .5) * planetsB[1].w;
+
+    dist = min(length(p.xz-planetsB[2].xz) / horizontal_gravity_scalar/planetsB[2].w / grid_scalar, 1.);
+    d += (cos(dist * PI) * .5 + .5) * planetsB[2].w;
+
+    dist = min(length(p.xz-planetsB[3].xz) / horizontal_gravity_scalar/planetsB[3].w / grid_scalar, 1.);
+    d += (cos(dist * PI) * .5 + .5) * planetsB[3].w;
+
+    return d;
+}
+
+void main()
+{
+    vec2 uv = vUV.xy;
+    vec3 xyz = vec3((uv*2.-1.)*grid_scalar*2., 0.).xzy;
+    float depth = gravity_distance(xyz);
+
+    float dist = length(xyz/grid_scalar);
+    depth = depth*(1.-supernova)+(cos(-time*PI+dist*dist*PI)*.5+.5)*supernova/(1.+dist*2.);
+    gl_FragColor = vec4(floor(depth)/256., fract(depth), floor(depth*256.)/256., 1.);
+}`,
+          "vertex": `
+precision highp float;
+precision highp int;
+
+#define UNIFORM_INSERTION_POINT
+
+attribute highp vec4 vertex; 
+
+varying vec2 vUV;
+void main(void) {
+    vUV = vertex.xy;
+    gl_Position = vec4(vUV.xy*2.-1., 0., 1.);
+}`,
+          "name": `gravity-program`
+        },
+        {
+          "dynamics": [
+            {
+              "value": () => {
+                return new Number(state.vertical_gravity).toFixed(3);
+              },
+              "name": `vertical_gravity`
+            },
+            {
+              "value": () => {
+                return new Number(state.grid_scalar).toFixed(3);
+              },
+              "name": `grid_scalar`
+            },
+            {
+              "value": () => {
+                return new Number(state.planet_radius_scalar).toFixed(3);
+              },
+              "name": `planet_radius_scalar`
+            },
+            {
+              "value": () => {
+                return utility_macros
+              },
+              "name": `utility_macros`
+            }
+          ],
+          "uniforms": [
+            {
+              "type": `MAT_FOUR`,
+              "value": () => {
+                const positions = state.planets.slice(0., 4.).map(p => [p.position[0], p.position[1], p.position[2], p.position[3]]);
+
+                while (positions.length < 4) positions.push([state.grid_scalar, state.grid_scalar, state.grid_scalar, 0]);
+                return positions.flat();
+              },
+              "name": `planetsMatrixA`
+            },
+            {
+              "type": `MAT_FOUR`,
+              "value": () => {
+                const positions = state.planets.slice(4., 8.).map(p => [p.position[0], p.position[1], p.position[2], p.position[3]])
+
+                while (positions.length < 4) positions.push([state.grid_scalar, state.grid_scalar, state.grid_scalar, 0]);
+
+                return positions.flat();
+              },
+              "name": `planetsMatrixB`
+            },
+            {
+              "type": `MAT_FOUR`,
+              "value": () => {
+                return glMatrix.mat4.invert(glMatrix.mat4.create(), state.projection_matrix);
+              },
+              "name": `projection_inverse`
+            },
+            {
+              "type": `VEC_THREE`,
+              "value": () => {
+                return state.user.position
+              },
+              "name": `player_position`
+            },
+            {
+              "type": `FLOAT`,
+              "value": () => {
+                return state.supernova
+              },
+              "name": `supernova`
+            },
+            {
+              "type": `MAT_FOUR`,
+              "value": () => {
+                return state.view_matrix;
+              },
+              "name": `view`
+            },
+            {
+              "type": `VEC_THREE`,
+              "value": () => {
+                return state.camera_position;
+              },
+              "name": `camera_position`
+            },
+            {
+              "type": `FLOAT`,
+              "value": () => {
+                return window.innerWidth;
+              },
+              "name": `width`
+            },
+            {
+              "type": `FLOAT`,
+              "value": () => {
+                return window.innerHeight;
+              },
+              "name": `height`
+            },
+            {
+              "type": `SAMPLER_TWO_D`,
+              "value": () => {
+                const context = pipeline.getContext("output-context");
+                const gl = context.gl;
+                const image = pipeline.getContext("projectiles-context").canvas
+                if (!context.projectiles_texture) context.projectiles_texture = gl.createTexture();
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, context.projectiles_texture);
+                const level = 0;
+                const internalFormat = gl.RGBA;
+                const srcFormat = gl.RGBA;
+                const srcType = gl.UNSIGNED_BYTE;
+
+                if (image) gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, srcFormat, srcType, image);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+                return 0;
+              },
+              "name": `projectiles_texture`
+            },
+            {
+              "type": `SAMPLER_TWO_D`,
+              "value": () => {
+                const context = pipeline.getContext("output-context");
+                const gl = context.gl;
+                const image = pipeline.getContext("gravity-context").canvas
+                if (!context.gravity_texture) context.gravity_texture = gl.createTexture();
+                gl.activeTexture(gl.TEXTURE1);
+                gl.bindTexture(gl.TEXTURE_2D, context.gravity_texture);
+                const level = 0;
+                const internalFormat = gl.RGBA;
+                const srcFormat = gl.RGBA;
+                const srcType = gl.UNSIGNED_BYTE;
+
+                if (image) gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, srcFormat, srcType, image);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+                return 1;
+              },
+              "name": `gravity_texture`
+            },
+            {
+              "type": `FLOAT`,
+              "value": () => {
+                return state.current_time
+              },
+              "name": `time`
+            }
+          ],
+          "fragment": `precision highp float;
+precision highp int;
+
+#define UNIFORM_INSERTION_POINT
+varying vec2 vUV;
+
+utility_macros
+
+mat4 planetsA = planetsMatrixA;
+mat4 planetsB = planetsMatrixB;
+
+float gravity_distance(vec3 p) {
+    vec2 uv = p.xz/grid_scalar*.25+.5;
+    uv.y = 1.-uv.y;
+    vec4 texColor = texture2D(gravity_texture, vec2(uv.x, uv.y));
+    float depth = texColor.r*256.+texColor.g+texColor.b/256.;
+    return p.y+depth*vertical_gravity;
+}
+
+void set_planet_heights() {
+    planetsA[0].y = -gravity_distance(vec3(planetsA[0].xz, 0.).xzy);
+    planetsA[1].y = -gravity_distance(vec3(planetsA[1].xz, 0.).xzy);
+    planetsA[2].y = -gravity_distance(vec3(planetsA[2].xz, 0.).xzy);
+    planetsA[3].y = -gravity_distance(vec3(planetsA[3].xz, 0.).xzy);
+
+    planetsB[0].y = -gravity_distance(vec3(planetsB[0].xz, 0.).xzy);
+    planetsB[1].y = -gravity_distance(vec3(planetsB[1].xz, 0.).xzy);
+    planetsB[2].y = -gravity_distance(vec3(planetsB[2].xz, 0.).xzy);
+    planetsB[3].y = -gravity_distance(vec3(planetsB[3].xz, 0.).xzy);
+}
+
+float planet_hit = 0.;
+float sphere_dist(in vec3 ro, in vec3 rd, vec4 sphere) {
+    vec3 oc = ro - sphere.xyz;
+    float b = dot( oc, rd );
+    float c = dot( oc, oc ) - sphere.w*grid_scalar*planet_radius_scalar;
+    float h = b*b - c;
+    if( h<0.0  || dot(oc, rd) > 0.) {
+       return 1.0E32;
+    }
+    planet_hit = 1.;
+    h = sqrt( h );
+    return -b - h;
+}
+
+vec3 gravity_normal(vec3 p) { 
+    vec2 e = vec2(grid_scalar/32., 0);
+    float d1 = gravity_distance(p + e.xyy), d2 = gravity_distance(p - e.xyy);
+    float d3 = gravity_distance(p + e.yxy), d4 = gravity_distance(p - e.yxy);
+    float d5 = gravity_distance(p + e.yyx), d6 = gravity_distance(p - e.yyx);
+    float d = gravity_distance(p);
+    return normalize(vec3(d1 - d2, d3 - d4, d5 - d6));
+}
+//main march
+vec3 march_gravity(vec3 ro, vec3 rd) {
+    float d = 0.0; //distance marched
+    vec3 rp = ro; //ray position
+    for (int i = 0; i < 10; i++) {
+        float ds = gravity_distance(rp);
+       //ds /= 8.;
+       rd = normalize(rd);
+        d += ds;
+        rp = ro + rd * d;
+    }
+        
+    return rp;
+}
+
+vec4 nearest_planet = vec4(grid_scalar);
+float mind = 1E32;
+float hit_planet = -1.;
+float trace_planets(vec3 ro, vec3 rd) {
+    
+    float mindis = 1E32;
+    float dis = sphere_dist(ro, rd, planetsA[0]);
+    if(mindis > dis){
+        mindis = dis;
+        nearest_planet = vec4(planetsA[0].xyz, 1.);
+        hit_planet = 0.;
+    }
+
+    dis = sphere_dist(ro, rd, planetsA[1]);
+    if(mindis > dis){
+        mindis = dis;
+        nearest_planet = vec4(planetsA[1].xyz, 2.);
+        hit_planet = 1.;
+    }
+
+    dis = sphere_dist(ro, rd, planetsA[2]);
+    if(mindis > dis){
+        mindis = dis;
+        nearest_planet = vec4(planetsA[2].xyz, 3.);
+        hit_planet = 2.;
+    }
+
+    dis = sphere_dist(ro, rd, planetsA[3]);
+    if(mindis > dis){
+        mindis = dis;
+        nearest_planet = vec4(planetsA[3].xyz, 4.);
+        hit_planet = 3.;
+    }
+
+    dis = sphere_dist(ro, rd, planetsB[0]);
+    if(mindis > dis){
+        mindis = dis;
+        nearest_planet = vec4(planetsB[0].xyz, 5.);
+        hit_planet = 4.;
+    }
+
+    dis = sphere_dist(ro, rd, planetsB[1]);
+    if(mindis > dis){
+        mindis = dis;
+        nearest_planet = vec4(planetsB[1].xyz, 6.);
+        hit_planet = 5.;
+    }
+
+    dis = sphere_dist(ro, rd, planetsB[2]);
+    if(mindis > dis){
+        mindis = dis;
+        nearest_planet = vec4(planetsB[2].xyz, 7.);
+        hit_planet = 6.;
+    }
+
+    dis = sphere_dist(ro, rd, planetsB[3]);
+    if(mindis > dis){
+        mindis = dis;
+        nearest_planet = vec4(planetsB[3].xyz, 8.);
+        hit_planet = 7.;
+    }
+
+    return mindis;
+}
+
+void main()
+{
+    set_planet_heights();
+
+    vec2 uv = vUV.xy;
+
+    vec4 look = projection_inverse*vec4(vec3(uv, 0.), 1.);
+    vec3 rayDir= (vec4(normalize(look.xyz), 0.)*view).xyz;
+
+    vec2 minimap_size = 1./3.*vec2(min(height/width, 1.), min(width/height, 1.));
+    float minimap = (1.-smoothstep(minimap_size.x*.975, minimap_size.x, uv.x*.5+.5))*(1.-smoothstep(minimap_size.y*.975, minimap_size.y, -uv.y*.5+.5));
+    float minimap_edge = smoothstep(0., .1, saw(minimap));
+
+    vec2 minimap_uv = ((uv*.5*vec2(1., -1.)+.5)/minimap_size*2.-1.);
+    minimap_uv = rotatePoint(vec3(minimap_uv*2.*grid_scalar, 0.).xzy, vec3(0., 1., 0.), atan(camera_position.x-player_position.x, camera_position.z-player_position.z)).xz+player_position.xz;
+    minimap_uv = (mod(minimap_uv/grid_scalar*.25+.5, vec2(1.))*2.-1.);
+    minimap_uv *= grid_scalar*2.;
+
+    vec3 ray_pos = camera_position*(1.-minimap)+minimap*(vec3(minimap_uv.x, minimap_uv.y, grid_scalar).xzy);
+    rayDir = rayDir*(1.-minimap)+minimap*vec3(0., -1., 0.);
+    
+    float planet_dis = trace_planets(ray_pos, rayDir);
+    vec3 planet_pos = planet_dis*rayDir+ray_pos;
+    vec3 gravity_pos = march_gravity(ray_pos, rayDir);
+
+    vec3 planet_normal = normalize(planet_pos-nearest_planet.xyz);
+
+    vec2 texCoords = gravity_pos.xz;
+    float gravity_dis = length(gravity_pos-ray_pos);
+    //gravity_pos.xz = rotatePoint(gravity_pos, vec3(0., 1., 0.), -time/grid_scalar*PI).xz;
+
+    float vertical_depth = gravity_distance(vec3(gravity_pos.x, 0., gravity_pos.z))/vertical_gravity;
+    vertical_depth = pow(vertical_depth, .5);
+
+    vec2 plane = ((saw(gravity_pos.xz))*2.-1.);
+
+    //plane /= mind*2.5;
+    //float grid_x = 1.-smoothstep(0., .25, abs(plane.x));
+    //float grid_z = 1.-smoothstep(0., .25, abs(plane.y));
+    //float grid = max(grid_x, grid_z);
+texCoords.y *= -1.;
+    vec2 grid_xy = (texCoords/grid_scalar*.25+.5);
+  grid_xy.x = 1.-grid_xy.x;
+    float sun = 0.;
+    if(hit_planet == 0.) sun = 1.;
+    float detail = 1.;
+   
+
+    vec3 rotated =  rotatePoint(planet_normal, normalize(flux(nearest_planet.w*12.21+21.12  )), time*PI*sin(nearest_planet.w*321.123));
+    float surface_water = sin(time*sun+rotated.x*detail*3.+1.)*sin(time*sun+rotated.y*detail*GR*2.+2.)*sin(rotated.z*detail*E+3.)*.5+.5;
+    float surface_couds = clamp(sin(-time*sun*PI+rotated.x*detail*3.+1.)*sin(-time*sun*PI+rotated.y*detail*GR*2.+2.)*sin(rotated.z*detail*E+3.)+pow(abs(rotated.y), 16.), 0., 1.);
+    vec3 planet_color = flux(rotated.x+rotated.z+nearest_planet.w*123.321)*surface_water*(1.-surface_couds)+surface_couds;
+    planet_color = planet_color*(1.-sun)+sun*vec3(surface_couds+surface_water/2.+.5, surface_water, saw(surface_water+surface_couds+time)*.125);
+    float isSun = (1.-(dot(normalize(vec3(planet_pos.x, 0., planet_pos.z)), planet_normal)*.5+.5));
+    planet_color = (sun+(1.-dot(planet_normal, rayDir)*.5+.5)*isSun)*planet_color;
+    planet_color = clamp(planet_color, vec3(0.), vec3(planet_hit));
+    vec4 texColor = texture2D(projectiles_texture, vec2(grid_xy.x, 1.-grid_xy.y));
+    float fractal = (1.+gravity_dis/grid_scalar)*(1.+minimap)*GR;
+    float map_edge = smoothstep(0., 4./grid_scalar*fractal, 1.-max((saw(grid_xy.x*2.-1.)), (saw(grid_xy.y*2.-1.))));//min(smoothstep(0., 1./grid_scalar*4.*fractal, 1.-abs(gravity_pos.x/grid_scalar/2.)),smoothstep(0., 1./grid_scalar*4.*fractal, 1.-abs(gravity_pos.z/grid_scalar/2.)));
+
+    gl_FragColor = vec4(planet_color, planet_hit);
+    vec2 edge_xy = grid_xy*2.-1.;//rotatePoint(vec3(grid_xy*2.-1., 0.).xzy, vec3(0., 1., 0.), time/PI).xz;
+
+    float edge_x = 1.-smoothstep(0., .125*fractal, saw(edge_xy.x*grid_scalar/4.));
+    float edge_z = 1.-smoothstep(0., .125*fractal, saw(edge_xy.y*grid_scalar/4.));
+ 
+float edge = max(edge_x, edge_z)*map_edge;
+    grid_xy.xy = 1.-grid_xy.xy;
+    grid_xy.xy-= player_position.xz/grid_scalar/2.*.5+.5;
+    float fog = (1.-smoothstep(0.125, .25, length(grid_xy.xy)));
+
+    float light = ((.75+.25*dot(-normalize(gravity_pos), gravity_normal(gravity_pos))));
+
+
+    vec3 sunDir = normalize(ray_pos+vec3(0., gravity_distance(vec3(0.)),0.));
+    if(gravity_dis < planet_dis) {
+        gl_FragColor += texColor*map_edge+vec4(saw(texColor*2.).rgb, 1.)*(1.-map_edge);
+    vec3 grid_color = flux((supernova+vertical_depth)+PI);
+   gl_FragColor += vec4(0., 1., 0., 1.)*(saw(map_edge*2.))*fog +(vec4(grid_color, 1.)*edge*fog*map_edge*light);
+    }
+
+    gl_FragColor+= minimap_edge+vec4(0.,0.,0.,minimap);
+}`,
+          "vertex": `precision highp float;
+precision highp int;
+
+#define UNIFORM_INSERTION_POINT
+
+attribute highp vec4 vertex; 
+
+varying vec2 vUV;
+void main(void) {
+    vec2 uv = vec2(vertex.x, vertex.y);
+    vUV = uv*2.-1.;
+
+    gl_Position = vec4(vUV, 0., 1.);
+}`,
+          "name": `raycast-program`
+        },
+        {
+          "name": `avatars-program`,
+          "uniforms": [
+            {
+              "type": `FLOAT`,
+              "value": () => {
+                return state.current_time
+              },
+              "name": `time`
+            }
+          ],
+          "fragment": `precision highp float;
+precision highp int;
+
+#define UNIFORM_INSERTION_POINT
+
+varying vec4 vPosition;
+varying vec4 vColor;
+varying float vPointSize;
+
+void main()
+{
+    gl_FragColor = vColor+smoothstep(.25, .75, vPosition.w);
+}`,
+          "vertex": `precision highp float;
+precision highp int;
+
+#define UNIFORM_INSERTION_POINT
+
+attribute highp vec4 vertex; 
+attribute highp vec4 color; 
+attribute highp vec4 shape; 
+
+varying vec4 vPosition;
+varying vec4 vColor;
+varying float vPointSize;
+utility_macros
+
+void main(void) {
+  vPosition = shape;
+  vColor = color;
+   vec2 size = rotatePoint(shape.xyz, vec3(0., 1., 0.), -shape.y).xz;
+    vec2 p =(vertex.xz)+size;
+    vPointSize = 64.;
+    gl_PointSize = vPointSize;
+    gl_Position = vec4(p, 0., 1.);
+}`,
+          "dynamics": [
+            {
+              "value": () => {
+                return utility_macros
+              },
+              "name": `grid_scalar`
+            },
+            {
+              "value": () => {
+                return utility_macros
+              },
+              "name": `utility_macros`
+            }
+          ]
+        },
+        {
+          "name": `avatars-program`,
+          "uniforms": [
+            {
+              "type": `FLOAT`,
+              "value": () => {
+                return state.current_time
+              },
+              "name": `time`
+            }
+          ],
+          "fragment": `precision highp float;
+precision highp int;
+
+#define UNIFORM_INSERTION_POINT
+
+varying vec4 vPosition;
+varying vec4 vColor;
+
+void main()
+{
+    gl_FragColor = vColor+smoothstep(.5, .75, vPosition.w);
+}`,
+          "vertex": `precision highp float;
+precision highp int;
+
+#define UNIFORM_INSERTION_POINT
+
+attribute highp vec4 vertex; 
+attribute highp vec4 color; 
+attribute highp vec4 shape; 
+
+varying vec4 vPosition;
+varying vec4 vColor;
+void main(void) {
+  vPosition = shape;
+  vColor = color;
+   vec2 size = rotatePoint(shape.xyz, vec3(0., 1., 0.), -shape.y).xz;
+    vec2 p =(vertex.xz)+size;
+    vPointSize = 64.;
+    gl_PointSize = vPointSize;
+    gl_Position = vec4(p, 0., 1.);
+}`,
+          "dynamics": [
+            {
+              "value": () => {
+                return new Number(state.grid_scalar).toFixed(3);
+              },
+              "name": `grid_scalar`
+            }
+          ]
+        },
+        {
+          "name": `projectiles-program`,
+          "uniforms": [
+            {
+              "type": `FLOAT`,
+              "value": () => {
+                return state.current_time
+              },
+              "name": `time`
+            }
+          ],
+          "fragment": `precision highp float;
+precision highp int;
+
+#define UNIFORM_INSERTION_POINT
+
+varying vec4 vPosition;
+varying vec4 vColor;
+varying float vPointSize;
+
+void main()
+{
+    gl_FragColor = vColor+smoothstep(.5, .75, 1.-vPosition.w);
+}`,
+          "vertex": `
+precision highp float;
+precision highp int;
+
+#define UNIFORM_INSERTION_POINT
+
+attribute highp vec4 vertex; 
+attribute highp vec4 color; 
+attribute highp vec4 shape; 
+
+varying vec4 vPosition;
+varying vec4 vColor;
+
+utility_macros
+
+void main(void) {
+  vPosition = shape;
+  vColor = color;
+  vec2 size = rotatePoint(shape.xyz, vec3(0., 1., 0.), -shape.y).xz;
+  vec2 p =(vertex.xz)+size;
+  gl_Position = vec4(p, 0., 1.);
+}`,
+          "dynamics": [
+            {
+              "value": () => {
+                return new Number(state.grid_scalar).toFixed(3);
+              },
+              "name": `grid_scalar`
+            },
+            {
+              "value": () => {
+                return utility_macros
+              },
+              "name": `utility_macros`
+            }
+          ]
+        },
+        {
+          "name": `stars-program`,
+          "uniforms": [
+            {
+              "type": `MAT_FOUR`,
+              "value": () => {
+                return state.mvp_matrix;
+              },
+              "name": `mvp_matrix`
+            },
+            {
+              "type": `FLOAT`,
+              "value": () => {
+                return window.innerWidth;
+              },
+              "name": `width`
+            },
+            {
+              "type": `FLOAT`,
+              "value": () => {
+                return window.innerHeight;
+              },
+              "name": `height`
+            },
+            {
+              "type": `FLOAT`,
+              "value": () => {
+                return state.current_time
+              },
+              "name": `time`
+            }
+          ],
+          "fragment": `precision highp float;
+precision highp int;
+
+#define UNIFORM_INSERTION_POINT
+
+varying vec4 vVertex;
+varying float fog;
+
+float star(in vec2 p, in float r, in float n, in float m)
+{
+    float an = 3.141593/(n);
+    float en = 3.141593/m;
+    vec2  acs = vec2(cos(an),sin(an));
+    vec2  ecs = vec2(cos(en),sin(en));
+    float bn = mod(atan(p.x,p.y),2.0*an) - an;
+    p = length(p)*vec2(cos(bn),abs(sin(bn)));
+
+    p -= r*acs;
+    p += ecs*clamp( -dot(p,ecs), 0.0, r*acs.y/ecs.y);
+    return length(p)*sign(p.x);
+}
+
+
+void main()
+{
+    vec2 uv = gl_PointCoord.xy*2.-1.;
+    float hash = 1.;
+    float star_edge = 1.-smoothstep(-.1, .1, star(uv, hash*.5+.5, floor(hash*2.)+5., 4.25));
+    gl_FragColor = vec4(star_edge);
+}`,
+          "vertex": `precision highp float;
+precision highp int;
+
+attribute highp vec4 vertex; 
+
+#define UNIFORM_INSERTION_POINT
+
+varying vec4 vVertex;
+varying float fog;
+
+utility_macros
+
+void main(void) {
+    vVertex = vertex;
+    vec4 pos = mvp_matrix*vec4(vertex.xyz, 1.);
+    gl_Position = pos;
+
+   
+    fog = clamp(length(vVertex.xyz/vVertex.w)/grid_scalar/4., 0., 1.);
+    gl_PointSize = 8.*(fog);
+//    gl_Position.w = 1.;
+}`,
+          "dynamics": [
+            {
+              "value": () => {
+                return new Number(state.grid_scalar).toFixed(3);
+              },
+              "name": `grid_scalar`
+            },
+            {
+              "value": () => {
+                return utility_macros
+              },
+              "name": `utility_macros`
+            }
+          ]
+        },
+        {
+          "name": `words-program`,
+          "uniforms": [
+            {
+              "type": `MAT_FOUR`,
+              "value": () => {
+                return state.mvp_matrix;
+              },
+              "name": `mvp_matrix`
+            },
+            {
+              "type": `FLOAT`,
+              "value": () => {
+                return window.innerWidth;
+              },
+              "name": `width`
+            },
+            {
+              "type": `FLOAT`,
+              "value": () => {
+                return window.innerHeight;
+              },
+              "name": `height`
+            },
+            {
+              "type": `FLOAT`,
+              "value": () => {
+                return state.current_time
+              },
+              "name": `time`
+            },
+            {
+              "type": `SAMPLER_TWO_D`,
+              "value": () => {
+                const context = pipeline.getContext("output-context");
+                const gl = context.gl;
+                const image = state.atlas_canvas
+                if (!context.atlas) context.atlas = gl.createTexture();
+                gl.activeTexture(gl.TEXTURE4);
+                gl.bindTexture(gl.TEXTURE_2D, context.atlas);
+                const level = 0;
+                const internalFormat = gl.RGBA;
+                const srcFormat = gl.RGBA;
+                const srcType = gl.UNSIGNED_BYTE;
+
+                if (image) gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, srcFormat, srcType, image);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+                return 4;
+              },
+              "name": `atlas`
+            }
+          ],
+          "fragment": `
+precision highp float;
+precision highp int;
+
+#define UNIFORM_INSERTION_POINT
+
+varying vec4 vColor;
+varying vec4 vShape;
+utility_macros
+
+void main()
+{
+    float alpha = min( smoothstep(0., vColor.z*.1, 1.-abs(vColor.x*2.-1.)),  smoothstep(0., vColor.w*.1, 1.-abs(vColor.y*2.-1.)));
+    gl_FragColor.rgba = vec4(texture2D(atlas, vShape.zw).rgba);;
+}`,
+          "vertex": `precision highp float;
+precision highp int;
+
+attribute highp vec4 vertex; 
+attribute highp vec4 color; 
+attribute highp vec4 shape; 
+
+#define UNIFORM_INSERTION_POINT
+
+varying vec4 vColor;
+varying vec4 vShape;
+
+void main(void) {
+    vColor =shape;
+    vShape = color;
+
+    vec4 xyzw = mvp_matrix*vec4(vertex.xyz, 1.);
+    xyzw /= xyzw.w;
+    xyzw.xyz += vec3(color.xy*0.05*vec2(height/width,1.), 0.);
+    gl_Position = xyzw;
+}`,
+          "dynamics": [
+            {
+              "value": () => {
+                return utility_macros
+              },
+              "name": `utility_macros`
+            }
+          ]
+        }
+      ],
+      "stages": [
+        {
+          "type": `MESH_TRIANGLES`,
+          "context": `gravity-context`,
+          "program": `gravity-program`,
+          "vertices": () => {
+            var context = pipeline.getContext("gravity-context");
+            return [[
+              0, 0, 0.0, 1.,
+              context.computed_width, 0, 0.0, 1.,
+              context.computed_width, context.computed_height, 0.0, 1.,
+              0, context.computed_height, 0.0, 1.
+            ]]
+          },
+          "indices": () => {
+            return [0, 1, 2, 0, 2, 3];
+          },
+          "name": `gravity-stage`
+        },
+        {
+          "type": `MESH_TRIANGLES`,
+          "context": `projectiles-context`,
+          "program": `fade-program`,
+          "vertices": () => {
+            var context = pipeline.getContext("projectiles-context");
+            return [[
+              0, 0, 0.0, 1.,
+              context.computed_width, 0, 0.0, 1.,
+              context.computed_width, context.computed_height, 0.0, 1.,
+              0, context.computed_height, 0.0, 1.
+            ]]
+          },
+          "indices": () => { return [0, 1, 2, 0, 2, 3]; },
+          "name": `fade-stage`
+        },
+        {
+          "type": `MESH_TRIANGLES`,
+          "context": `projectiles-context`,
+          "program": `projectiles-program`,
+          "vertices": () => { return [[state.projectiles_positions.flat(), state.asteroids_positions.flat()].flat(), [state.projectiles_colors.flat(), state.asteroids_colors.flat()].flat(), [state.projectiles_vertices.flat(), state.asteroids_vertices.flat()].flat()]; },
+          "indices": () => {
+            var context = pipeline.getContext("projectiles-context");
+            //context.gl.enable(context.gl.BLEND)
+            return [state.projectiles_indices, state.asteroids_indices.map((i) => i + state.projectiles_vertices.length)].flat()
+          },
+          "name": `projectiles-stage`
+        },
+        {
+          "type": `MESH_TRIANGLES`,
+          "context": `projectiles-context`,
+          "program": `avatars-program`,
+          "vertices": () => {
+            return [state.avatars_positions.flat(), state.avatars_colors.flat(), state.avatars_vertices.flat()];
+          },
+          "indices": () => {
+            var context = pipeline.getContext("projectiles-context");
+            return state.avatars_indices.flat()
+          },
+          "name": `avatars-stage`
+        },
+        {
+          "type": `MESH_POINTS`,
+          "context": `output-context`,
+          "program": `stars-program`,
+          "vertices": () => {
+            var context = pipeline.getContext("output-context");
+            return [[state.stars_mesh_vertices, state.particles_mesh_vertices].flat().flat()]
+          },
+          "indices": () => { return [state.stars_mesh_indices, state.particles_mesh_indices.map((e) => { return e + state.stars_mesh_vertices.length })].flat(); },
+          "name": `stars-stage`
+        },
+        {
+          "type": `MESH_TRIANGLES`,
+          "context": `output-context`,
+          "program": `raycast-program`,
+          "vertices": () => {
+            var context = pipeline.getContext("output-context");
+            return [[
+              0, 0, 0.0, 1.,
+              context.computed_width, 0, 0.0, 1.,
+              context.computed_width, context.computed_height, 0.0, 1.,
+              0, context.computed_height, 0.0, 1.
+            ]]
+          },
+          "indices": () => { return [0, 1, 2, 0, 2, 3]; },
+          "name": `raycast-stage`
+        },
+        {
+          "type": `MESH_TRIANGLES`,
+          "context": `output-context`,
+          "program": `words-program`,
+          "vertices": () => { return [state.words_mesh_vertices.flat(), state.words_mesh_texture_coords.flat(), state.words_mesh_shapes.flat()]; },
+          "indices": () => { return state.words_mesh_indices },
+          "name": `words-stage`
+        }
+      ]
+    })
+  </script>
+</head>
+
+<body>
+  <div class="minimize_button" style="position: absolute; right: 0px; top: 0px;" onclick="">
+    <input type="checkbox" onchange="toggle_collapse()" checked id="hamburger">
+    <label for="hamburger" class="hamburger">
+      <span class="line"></span>
+      <span class="line"></span>
+      <span class="line"></span>
+    </label>
+  </div>
+  <div id='main-window' style="display: block;" class="container">
+    <div id='connect-page'>
+      <div>
+        <br>
+        <button style="font-size: 32px; color:#fff; border-color:#0f0;" onclick='connect()'>Connect</button>
+        <br><br>
+      </div>
+    </div>
+    <div id='channels-page' style="overflow-y: hidden;">
+      <div id="chat-page" style="display: none; border-top:1px solid #fff;">
+        <br>
+        <button style="width:auto; color:#fff; border-color:#ff0;" onclick="leave_channel()">Leave Channel</button>
+        <br><br>
+        <textarea id='output' disabled></textarea>
+        <br>
+
+        <div id='input'>
+          <input style='width:50% !important; display:inline-block; text-align: center;' autocomplete="off"
+            autocorrect="off" autocapitalize="off" spellcheck="false" id='command' placeholder='Type network message...'
+            type='text' onkeyup='if (event.key === "Enter") enter_command();'></input>
+
+          <button style="width:30%;color:#fff; border-color:#0f0;" onclick="enter_command()">Send</button>
+          <br><br>
+        </div>
+      </div>
+      <div id="lobby-page" style="display: none; border-top:1px solid #fff;">
+        <br>
+        <h1>Your assigned name: <u id="assigned-name"></u></h1>
+        <br>
+        <div style="border-top:1px solid #fff;">
+          <h1><u>Channels List</u></h1>
+          <div id='listing'>
+          </div>
+        </div>
+        <br>
+        <div id='input' style="border-top:1px solid #fff;">
+          <h1>Choose your display name:</h1>
+          <input style='width:50% !important; display:inline-block; text-align: center;' autocomplete="off"
+            autocorrect="off" autocapitalize="off" spellcheck="false" id='display_name' placeholder='Display name...'
+            type='text' onkeyup='if (event.key === "Enter") set_name();'></input>
+          <button style="width:auto; display:inline-block; color:#fff; border-color:#0f0;"
+            onclick='set_name()'>Choose</button>
+        </div>
+        <br>
+        <h1 style="border-top:1px solid #fff;"><u>Create/Join Channels</u></h1>
+        <div id='create-join'>
+          <div style='text-align:center; width:100%; display:inline-block;' id='create-join'>
+            <h1 style='width:40% !important; display:inline-block;'>Channel Name:</h1>
+            <input style='width:50% !important; display:inline-block; text-align: center;' autocomplete="off"
+              autocorrect="off" autocapitalize="off" spellcheck="false" id='channel-name' placeholder='Channel name...'
+              type='text' onkeyup='if (event.key === "Enter") create_join_channel();'></input>
+
+            <h1 style='width:40% !important; display:inline-block;'>Password:</h1>
+            <input style='left: 0px;  width:50% !important; display:inline-block; text-align: center;'
+              autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" id='password'
+              placeholder='Password...' type='text' onkeyup='if (event.key === "Enter") create_join_channel();'></input>
+          </div>
+          <br><br>
+          <button style="width:auto; color:#fff; border-color:#0f0;" onclick="create_join_channel()">Create/Join
+            Channel</button>
+          <br><br>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="death-indicator">
+  </div>
+  <script type="text/javascript">var utility_macros = `
+    #define PI 3.14159265359
+    #define E 2.7182818284
+    #define GR 1.61803398875
+    
+    #define saw(x) fract(sign(1. - mod(abs(x), 2.)) * abs(x))
+    #define flux(x) (vec3(cos(x),cos(4.0*PI/3.0+x),cos(2.0*PI/3.0+x))*.5+.5)
+    #define rotatePoint(p,n,theta) (p*cos(theta)+cross(n,p)*sin(theta)+n*dot(p,n) *(1.0-cos(theta)))
+    `
+    const sample_size = 4096*2
+    const amplitude_threshold = .0025
+
+    try {
+      state.websocket.close()
+    } catch (e) { }
+
+    let num_planets = 1.; //The sun counts as a planet, too.
+
+    const num_pew_sounds = 2;
+    const num_boom_sounds = 3;
+
+    const powerup_rareness = .875;
+    const init_health = 5;
+    const init_firing_rate = .5;
+    const max_projectiles = 128;
+    const max_asteroids = 64;
+    const init_time = new Date().getTime();
+    const init_scalar = 512;
+    const default_planet_names =
+      [
+        "The sun",
+        "CoRoT-7b",
+        "Gliese 581",
+        "HD 209458b",
+        "HIP 13044b",
+        "Kepler-186f",
+        "Kepler-452b",
+        "SO-L337-101"
+      ]
+
+    String.prototype.hashCode = function () {
+      var hash = 0,
+        i, chr;
+      if (this.length === 0) return hash;
+      for (i = 0; i < this.length; i++) {
+        chr = this.charCodeAt(i);
+        hash = ((hash << 5) - hash) + chr;
+        hash |= 0; // Convert to 32bit integer
+      }
+      return hash;
+    }
+
+    window.onresize = (e) => {
+      var context = pipeline.getContext("output-context");
+      context.canvas.width = window.innerWidth;
+      context.canvas.height = window.innerHeight;
+    }
+
+    function update_timing() {
+      const now = new Date().getTime();
+      state.current_time = (now - state.start_time) / 1E3 * state.temporal_scalar;
+      state.delta_time = (now - state.last_time) / 1E3 * state.temporal_scalar;
+      state.universal_time += (now - state.last_time) / 1E3
+      state.last_time = now;
+      return state.delta_time <= state.max_time_step;
+    }
+
+    function move_physics(objects) {
+      for (var object of objects) {
+        glMatrix.vec3.scaleAndAdd(object.position, object.position, object.velocity, state.delta_time)
+      }
+    }
+
+    function enforce_boundaries() {
+      var all_objects = state.user.health <= 0 ? [state.channel_members, state.projectiles, state.asteroids, state.powerups].flat() : [state.user, state.channel_members, state.projectiles, state.asteroids, state.powerups].flat();
+      for (var object of all_objects) {
+        var pos = object.position
+        pos = [pos[0], pos[1], pos[2], pos[3]]
+        var new_pos = pos.map(e => { return ((e / state.grid_scalar * .25 + 1.5) % 1 * 2. - 1.) * state.grid_scalar * 2 });
+        var delta = new_pos.map((e, i) => { return e - pos[i] })
+        glMatrix.vec3.add(object.position, object.position, delta)
+
+        if (object.name == state.user.name) {
+          glMatrix.vec3.add(state.camera_position, state.camera_position, delta)
+        }
+      }
+
+      [state.user, state.channel_members].flat().forEach((user) => {
+        var projectiles_of = state.projectiles.filter((p) => p.creator.name == user.name)
+        var projectiles_not_of = state.projectiles.filter((p) => p.creator.name != user.name)
+        projectiles_of = projectiles_of.slice(Math.max(projectiles_of.length - max_projectiles, 0), projectiles_of.length)
+        state.projectiles = [projectiles_of, projectiles_not_of].flat();
+      })
+      state.asteroids = state.asteroids.slice(Math.max(state.asteroids.length - max_asteroids, 0), state.asteroids.length)
+    }
+
+    function apply_gravity(objects, movment_scalar) {
+      for (var object of objects) {
+        object.position[1] += ((-gravity(object.position)) - object.position[1]) * state.delta_time;
+        object.velocity[1] = 0
+        glMatrix.vec3.scaleAndAdd(object.velocity, object.velocity, gravity_normal(object.position), - state.delta_time * movment_scalar * state.grid_scalar * state.gravitation_scalar)
+        var vel_xz = [object.velocity[0], object.velocity[2]]
+        var speed_xz = glMatrix.vec2.length(vel_xz)
+        speed_xz = Math.max(Math.min(speed_xz, state.max_speed * movment_scalar), 0.);
+        vel_xz = glMatrix.vec2.normalize(glMatrix.vec2.create(), vel_xz)
+        object.velocity[0] = vel_xz[0] * speed_xz;
+        object.velocity[2] = vel_xz[1] * speed_xz;
+      }
+    }
+
+    function update_camera() {
+      var output_canvas = pipeline.getContext("output-context").canvas;
+      var aspect = output_canvas.width / output_canvas.height;
+      state.projection_matrix = glMatrix.mat4.frustum(glMatrix.mat4.create(), -aspect, aspect, -1, 1, 1., state.grid_scalar * 100.);
+      state.view_matrix = glMatrix.mat4.lookAt(glMatrix.mat4.create(), state.camera_position, state.user.position, [0, 1., 0.])
+      state.model_matrix = glMatrix.mat4.identity(glMatrix.mat4.create());
+      state.mvp_matrix = glMatrix.mat4.mul(glMatrix.mat4.create(), glMatrix.mat4.mul(glMatrix.mat4.create(), state.projection_matrix, state.view_matrix), state.model_matrix);
+      state.mvp_inverse = glMatrix.mat4.invert(glMatrix.mat4.create(), state.mvp_matrix)
+      if (state.audio_ctx) {
+
+        const pos = glMatrix.mat4.mul(glMatrix.vec4.create(), state.view_matrix, [state.camera_position[0], state.camera_position[1], state.camera_position[2], 1.]);
+        state.audio_ctx.listener.setPosition(pos[0] / pos[3] / state.grid_scalar, pos[1] / pos[3] / state.grid_scalar, pos[2] / pos[3] / state.grid_scalar);
+        // state.audio_ctx.listener.setPosition(0, 0, 0);
+
+      }
+    }
+
+    function control_scene() {
+
+      if (state.auto_shoot_scoot) {
+        state.keyW = true;
+        state.keyUp = true;
+        var nearest = JSON.parse(JSON.stringify(state.planets)).sort((a, b) => {
+          var dxa = a.position[0] - state.user.position[0];
+          var dza = a.position[2] - state.user.position[2];
+          var dxb = b.position[0] - state.user.position[0];
+          var dzb = b.position[2] - state.user.position[2];
+          return Math.sign(Math.sqrt(dxa * dxa + dza * dza) - Math.sqrt(dxb * dxb + dzb * dzb));
+        })[0]
+
+        var normal = gravity_normal(state.user.position)
+        var vel = glMatrix.vec3.rotateY(glMatrix.vec3.create(), state.user.velocity, [0, 1, 0], Math.PI / 2.)
+        var forward = glMatrix.vec3.dot(normal, state.user.velocity)
+        var nearest_vec = [nearest.position[0] - state.user.position[0], nearest.position[2] - state.user.position[2]];
+        var nearest_dist = glMatrix.vec2.length(nearest_vec)
+        var nearest_dir = glMatrix.vec2.normalize(glMatrix.vec2.create(), nearest_vec);
+        var left = glMatrix.vec2.dot(nearest_dir, [vel[0], vel[2]])
+        if (nearest_dist / state.grid_scalar < .5) {
+          if (forward < 0) {
+            if (left < 0) {
+              state.keyLeft = true;
+              state.keyRight = Math.random() > .85;
+              state.keyA = true;
+              state.keyD = false;
+            } else {
+              state.keyRight = true;
+              state.keyLeft = Math.random() > .85;
+              state.keyA = false;
+              state.keyD = true;
+            }
+          } else if (forward > 0) {
+            if (left > 0) {
+              state.keyLeft = true;
+              state.keyRight = Math.random() > .85;
+              state.keyA = true;
+              state.keyD = false;
+            } else {
+              state.keyRight = true;
+              state.keyLeft = Math.random() > .85;
+              state.keyA = false;
+              state.keyD = true;
+            }
+          }
+          else {
+            state.keyRight = Math.random() > .5;
+            state.keyLeft = Math.random() > .5;
+            state.keyA = Math.random() > .5;
+            state.keyD = !state.keyA;
+          }
+        }
+        else {
+          state.keyRight = Math.random() > .5;
+          state.keyLeft = Math.random() > .5;
+          state.keyA = Math.random() > .5;
+          state.keyD = !state.keyA;
+        }
+      }
+
+
+      if (state.keyD) {
+        state.delta_move[0] += state.delta_time * state.key_speed;
+      }
+      if (state.keyS) {
+        state.delta_move[1] += state.delta_time * state.key_speed;
+      }
+      if (state.keyA) {
+        state.delta_move[0] -= state.delta_time * state.key_speed;
+      }
+      if (state.keyW) {
+        state.delta_move[1] -= state.delta_time * state.key_speed;
+      }
+
+      if (state.keyUp) {
+        state.delta_fire[1] -= state.delta_time * state.key_speed;
+      }
+      if (state.keyDown) {
+        state.delta_fire[1] += state.delta_time * state.key_speed;
+      }
+      if (state.keyLeft) {
+        state.delta_fire[0] -= state.delta_time * state.key_speed;
+      }
+      if (state.keyRight) {
+        state.delta_fire[0] += state.delta_time * state.key_speed;
+      }
+
+
+      if (state.keyD || state.keyS || state.keyA || state.keyW || state.keyUp || state.keyDown || state.keyLeft || state.keyRight) {
+        state.control_decay = 8.;
+      }
+
+      state.camera_position[1] += ((-gravity(state.user.position) + state.grid_scalar) - state.camera_position[1]) * state.delta_time * state.camera_speed_scalar;
+      glMatrix.vec3.sub(state.camera_position, state.camera_position, state.user.position)
+      var length = glMatrix.vec3.length(state.camera_position)
+      glMatrix.vec3.scale(state.camera_position, state.camera_position, 1. / length)
+
+      var left = glMatrix.vec3.create()
+      glMatrix.vec3.cross(left, [0, 1, 0], state.camera_position)
+      glMatrix.vec3.normalize(left, left);
+      var left_len = Math.sqrt(left[0] * left[0] + left[2] * left[2])
+      var up = JSON.parse(JSON.stringify(state.camera_position));
+      var up_len = Math.sqrt(up[0] * up[0] + up[2] * up[2])
+
+      state.user.velocity[0] += (left[0] / left_len * state.delta_move[0] + state.delta_move[1] * up[0] / up_len) * state.agility * state.grid_scalar * state.delta_time
+      state.user.velocity[2] += (left[2] / left_len * state.delta_move[0] + state.delta_move[1] * up[2] / up_len) * state.agility * state.grid_scalar * state.delta_time
+      state.user.velocity[1] = 0
+      // state.delta_move = [0, 0]
+
+      var move_len = Math.sqrt(state.delta_move[0] * state.delta_move[0] + state.delta_move[1] * state.delta_move[1])
+      if (move_len) {
+        state.delta_move[0] /= move_len;
+        state.delta_move[1] /= move_len;
+        move_len = Math.max(Math.min(state.controls_radius, move_len - state.control_decay * state.delta_time * state.controls_radius), 0.)
+
+        state.delta_move[0] *= move_len;
+        state.delta_move[1] *= move_len;
+      }
+
+      var fire_len = Math.sqrt(state.delta_fire[0] * state.delta_fire[0] + state.delta_fire[1] * state.delta_fire[1]);
+      if (fire_len > 0) {
+        state.delta_fire[0] /= fire_len;
+        state.delta_fire[1] /= fire_len;
+        fire_len = Math.max(Math.min(state.controls_radius, fire_len - state.control_decay * state.delta_time * state.controls_radius), 0.)
+
+        state.delta_fire[0] *= fire_len;
+        state.delta_fire[1] *= fire_len;
+      }
+
+      length += (state.grid_scalar / 8. - length) * state.delta_time * state.camera_speed_scalar
+      glMatrix.vec3.scaleAndAdd(state.camera_position, state.user.position, state.camera_position, length)
+    }
+
+    function update_channel_physics() {
+      var time = new Date().getTime()
+      if (state.current_channel && (time - state.last_physics_send) / 1E3 > state.physics_wait) {
+        send_command(OP_SAY, {})
+        state.last_physics_send = time;
+      }
+
+      if ((time - state.last_asteroid_create) / 1E3 > state.asteroids_frequency) {
+        state.last_asteroid_create = time;
+        var vel = [(Math.random() * 2. - 1.) * state.max_speed, 0., (Math.random() * 2. - 1.) * state.max_speed, 0.]
+
+
+        var asteroid = new Asteroid([-state.grid_scalar * 2. * Math.sign(Math.random() - .5), 0., state.grid_scalar * 2. * Math.sign(Math.random() - .5), state.default_radius], [vel[0], vel[1], vel[2], vel[3]], state.universal_time)
+        state.asteroids.push(asteroid);
+        if (state.current_channel) send_command(OP_SAY, { message: "/asteroid" }, [asteroid.position, [asteroid.created, asteroid.is_powerup, 0, 0], asteroid.velocity, state.user.angular_velocity]);
+      }
+
+
+      var fire_len = Math.sqrt(state.delta_fire[0] * state.delta_fire[0] + state.delta_fire[1] * state.delta_fire[1]);
+      if (fire_len > state.grid_scalar / 1E8 && (time - state.last_projectile_send) / 1E3 > state.user.firing_rate) {
+        var pos = state.user.position;
+        var vel = state.user.velocity;
+        var projectile = new Projectile([pos[0], pos[1], pos[2], pos[3] / 2.], [vel[0], vel[1], vel[2], vel[3]], state.user)
+        state.projectiles.push(projectile);
+        state.last_projectile_send = time;
+        var dx = state.camera_position[0] - state.user.position[0]
+        var dz = state.camera_position[2] - state.user.position[2]
+
+        var camera_angle = Math.atan2(dz, -dx)
+        var fire_angle = Math.atan2(state.delta_fire[1], -state.delta_fire[0])
+        var fire_vector = glMatrix.vec3.rotateY(glMatrix.vec3.create(), [0, 0, -1], [0, 1, 0], camera_angle + fire_angle);
+        glMatrix.vec3.normalize(fire_vector, fire_vector);
+        projectile.velocity = glMatrix.vec3.scaleAndAdd(glMatrix.vec4.create(), state.user.velocity, fire_vector, fire_len / state.controls_radius * state.projectiles_speed_scalar * state.max_speed)
+
+        play_pew(projectile.position)
+
+        if (state.current_channel) send_command(OP_SAY, { message: "/pew" }, [projectile.position, state.user.orientation, projectile.velocity, state.user.angular_velocity]);
+      }
+    }
+
+    function gravity(vertex, dx = 0, dz = 0) {
+      var index_x = Math.floor((vertex[0] / state.grid_scalar * .25 + .5) % 1.0 * state.gravity_texture_size)
+      var index_z = Math.floor((vertex[2] / state.grid_scalar * .25 + .5) % 1.0 * state.gravity_texture_size)
+
+      index_x += dx
+      index_z += dz
+
+      var index = (index_x + state.gravity_texture_size * index_z) * 4;
+
+      if (!state.gravity_pixels || !state.gravity_texture_size) return 0;
+
+      var height = state.gravity_pixels[index + 0] + state.gravity_pixels[index + 1] / 256. + state.gravity_pixels[index + 2] / 256. / 256.;
+
+      return height ? height * state.vertical_gravity : 0
+    }
+
+    function gravity_normal(vertex) {
+      var delta = 1. / state.gravity_texture_size;
+
+      var dx = gravity(vertex) - gravity(vertex, 1, 0)
+      var dz = gravity(vertex) - gravity(vertex, 0, 1)
+
+      var len = Math.sqrt(dx * dx + dz * dz + delta * delta);
+      var normal = [dx / len, delta / len, dz / len];
+
+      normal = glMatrix.vec3.normalize(glMatrix.vec3.create(), normal)
+      return [normal[0], normal[1], normal[2]];
+    }
+
+    window.renderLoop = () => {
+      if (!update_timing()) return;
+      respawn_users();
+      state.word_list = state.word_list.filter(w => {
+        return state.current_time - w.said_when < 10
+      })
+      state.nametag_words = state.channel_members.filter(u => { return u.health > 0 }).map(user => {
+        return new Words(user.name, user.name, user.position, state.current_time)
+      })
+      state.supernova = Math.max((Math.cos(-state.universal_time * state.temporal_scalar * 2. * Math.PI / 30.) * .5 + .5) * 30. - 29., 0.)
+
+      const flip = false;
+      var pgl = pipeline.getContext("projectiles-context").gl;
+      pgl.disable(pgl.BLEND);
+      pgl.blendFunc(pgl.SRC_ALPHA, pgl.ONE_MINUS_SRC_ALPHA);
+      pgl.pixelStorei(pgl.UNPACK_FLIP_Y_WEBGL, flip);
+
+      var gravity_context = pipeline.getContext("gravity-context");
+      var ggl = gravity_context.gl;
+      ggl.disable(ggl.BLEND);
+      ggl.blendFunc(ggl.ONE, ggl.ONE);
+      ggl.pixelStorei(ggl.UNPACK_FLIP_Y_WEBGL, flip);
+
+      state.gravity_texture_size = gravity_context.canvas.width;
+      state.gravity_pixels = new Uint8Array(4 * state.gravity_texture_size * state.gravity_texture_size);
+      ggl.readPixels(0, 0, state.gravity_texture_size, state.gravity_texture_size, ggl.RGBA, ggl.UNSIGNED_BYTE, state.gravity_pixels);
+
+      const context = pipeline.getContext("output-context")
+      const gl = context.gl;
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, flip);
+      gl.disable(gl.DEPTH_TEST);
+      gl.disable(gl.CULL_FACE);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      gl.clear(gl.COLOR_BUFFER_BIT);// | gl.DEPTH_BUFFER_BIT);
+
+
+      for (var user of state.channel_members) {
+        ab = glMatrix.vec4.sub(glMatrix.vec3.create(), user.target_position, user.position)
+        glMatrix.vec3.scaleAndAdd(user.position, user.position, ab, state.delta_time * state.physics_wait);
+        ab = glMatrix.vec3.sub(glMatrix.vec3.create(), user.target_velocity, user.velocity)
+        glMatrix.vec3.scaleAndAdd(user.velocity, user.velocity, ab, state.delta_time * state.physics_wait);
+        ab = glMatrix.vec3.sub(glMatrix.vec3.create(), user.target_orientation, user.orientation)
+        glMatrix.vec3.scaleAndAdd(user.orientation, user.orientation, ab, state.delta_time * state.physics_wait);
+        ab = glMatrix.vec3.sub(glMatrix.vec3.create(), user.target_angular_velocity, user.angular_velocity)
+        glMatrix.vec3.scaleAndAdd(user.angular_velocity, user.angular_velocity, ab, state.delta_time * state.physics_wait);
+      }
+
+
+
+      move_physics(state.user.health <= 0 ? [state.channel_members, state.projectiles, state.asteroids, state.powerups].flat() : [state.user, state.channel_members, state.projectiles, state.asteroids, state.powerups].flat());
+
+      move_physics(state.explosions.map((e) => {
+        return e.positions.map((_, i) => {
+          return {
+            position: e.positions[i],
+            velocity: e.velocities[i],
+          }
+        })
+      }).flat().flat());
+
+      if (state.user.health > 0) control_scene();
+
+      if (state.user.health > 0) update_camera();
+
+      enforce_boundaries()
+
+      apply_gravity(state.user.health <= 0 ? state.channel_members : [state.user, state.channel_members].flat(), 1.)
+      apply_gravity(state.projectiles, state.projectiles_speed_scalar)
+      apply_gravity([state.asteroids, state.powerups].flat(), state.asteroids_speed_scalar)
+
+
+      update_planets();
+      state.projectiles = update_planet_collisions(state.projectiles);
+      state.asteroids = update_planet_collisions(state.asteroids);
+      //state.user = update_planet_collisions([state.user])[0];
+
+      update_projectile_collisions()
+
+      reload_atlas()
+      reload_atlas_attributes();
+      update_channel_physics()
+      load_avatars_attribles()
+      load_projectiles_attribles();
+      load_asteroids_attribles();
+      reload_particles_attributes();
+
+
+      // Update word heights:
+      [state.planet_labels, state.word_list, state.nametag_words].flat().forEach(words => {
+        words.position[1] = -gravity(words.position) + state.grid_scalar / 10.
+      });
+      [state.user, state.channel_members].flat().forEach(user => {
+        user.position[1] += (-gravity(user.position) - user.position[1]) * state.delta_time * 2.
+
+      })
+
+      state.frame_count++;
+    }
+
+    window.setInterval(()=>{
+      if (state.audio_ctx){
+        state.channel_members.forEach((user) => {
+          if (user.audio_clips.length > 0) {
+            const time = new Date().getTime() / 1E3
+            const since_last = (time - user.last_speak)
+            if (since_last > user.audio_clips[0][0]) {
+              [_, audio_signal] = user.audio_clips.shift()
+              const audio = new Audio()
+              audio.src = audio_signal
+              audio.play()
+              user.last_speak = time
+            }
+          }
+        })
+
+        if(state.microphone && state.analyser) {
+          var data_array = new Float32Array(sample_size);
+          state.output_signal = data_array
+          state.analyser.getFloatTimeDomainData(data_array);
+
+          var average_amplitude = 0
+
+          data_array = new Int16Array(data_array).map((_, i) => {
+            average_amplitude += Math.abs(data_array[i])
+            return Math.floor(data_array[i] * 256 * 128)
+          })
+
+          average_amplitude /= sample_size
+          // console.log(average_amplitude)
+          state.average_amplitude = Math.max(average_amplitude, state.average_amplitude - 1. / 60)
+          if (average_amplitude > amplitude_threshold) {
+
+
+            channels = 1; //1 for mono or 2 for stereo
+            kbps = 128; //encode 128kbps mp3
+            mp3encoder = new lamejs.Mp3Encoder(channels, state.audio_ctx.sampleRate, kbps);
+            var mp3Data = [];
+
+            samples = data_array; //one second of silence (get your data from the source you have)
+            sampleBlockSize = 576*4; //can be anything but make it a multiple of 576 to make encoders life easier
+
+            var mp3Data = [];
+            for (var i = 0; i < samples.length; i += sampleBlockSize) {
+              sampleChunk = samples.subarray(i, i + sampleBlockSize);
+              var mp3buf = mp3encoder.encodeBuffer(sampleChunk);
+              if (mp3buf.length > 0) {
+                mp3Data.push(mp3buf);
+              }
+            }
+            var mp3buf = mp3encoder.flush();   //finish writing mp3
+
+            if (mp3buf.length > 0) {
+              mp3Data.push(new Int8Array(mp3buf));
+            }
+
+
+            var blob = new Blob(mp3Data, { type: 'audio/mp3' });
+            reader = new FileReader();
+            reader.onload = function (e) {
+              const src = e.target.result;
+              state.audio_signal = str2bin(src)
+              if (state.current_channel) send_command(OP_SAY, { message: "/chatter" })
+              state.last_transmit = new Date().getTime()-data_array.length/state.audio_ctx.sampleRate;
+            };
+            reader.readAsDataURL(blob);
+          }
+        }
+      }
+    }, 100.)
+
+    const OP_ERROR = 1;
+    const OP_NAME = 2;
+    const OP_SAY = 3;
+    const OP_LIST = 4;
+    const OP_JOIN = 5;
+    const OP_LEAVE = 6;
+
+    function Projectile(position, velocity, creator) {
+      this.position = position ? position : new Float32Array(4).fill(0);
+      this.velocity = velocity ? velocity : new Float32Array(4).fill(0);
+      this.creator = creator
+      this.created = state.current_time;
+    }
+    function Explosion(position, velocity) {
+      this.positions = new Array(state.particles_per_explosion).fill(0).map((_, index) => {
+        var poff = [
+          (Math.random() - .5) * state.default_radius * 2.,
+          (Math.random() - .5) * state.default_radius * 2.,
+          (Math.random() - .5) * state.default_radius * 2.
+        ]
+        return glMatrix.vec3.add(glMatrix.vec3.create(), position, poff)
+      })
+      this.velocities = new Array(state.particles_per_explosion).fill(0).map((_, index) => {
+        var voff = [
+          state.max_speed * (Math.random() - .5),
+          state.max_speed * (Math.random() - .5),
+          state.max_speed * (Math.random() - .5)
+        ]
+        return glMatrix.vec3.add(glMatrix.vec3.create(), velocity, voff)
+      })
+      this.created = state.current_time;
+    }
+    function Asteroid(position, velocity, time) {
+      this.position = position ? position : new Float32Array(4).fill(0);
+      this.velocity = velocity ? velocity : new Float32Array(4).fill(0);
+      this.created = time ? time : state.current_time;
+      this.is_powerup = Math.random();
+    }
+    function Powerup(position, velocity, time, is_powerup) {
+      this.position = position ? position : new Float32Array(4).fill(0);
+      this.velocity = velocity ? velocity : new Float32Array(4).fill(0);
+      this.created = time ? time : state.current_time;
+      this.is_health = is_powerup > powerup_rareness + (1. - powerup_rareness) / 1.5;
+    }
+    function Words(user_name, words, spot, when) {
+      this.said_name = user_name ? user_name : ""
+      this.said_words = words ? words : ""
+      this.position = spot ? spot : new Float32Array(4).fill(0)
+      this.said_when = when ? when : state.current_time;
+    }
+
+    function User(name) {
+      this.audio_clips = []
+      this.last_speak = new Date().getTime() / 1E3
+      this.name = name ? name : ""
+      this.position = new Float32Array(4).fill(0)
+      this.position[0] = state.grid_scalar * (Math.random() * .01 + .99)
+      this.position[2] = state.grid_scalar * (Math.random() * .01 + .99)
+      this.position[3] = state.default_radius;
+      this.orientation = new Float32Array(4).fill(0)
+      this.velocity = new Float32Array(4).fill(0)
+      this.velocity[0] = state.max_speed * (Math.random() - .5) * 0
+      this.velocity[2] = state.max_speed * (Math.random() - .5) * 0
+      this.angular_velocity = new Float32Array(4).fill(0)
+      this.health = init_health;
+      this.last_death = -1E32;
+      this.firing_rate = init_firing_rate;
+
+      this.target_position = new Float32Array(4).fill(0)
+      this.target_velocity = new Float32Array(4).fill(0)
+      this.target_orientation = new Float32Array(4).fill(0)
+      this.target_angular_velocity = new Float32Array(4).fill(0)
+    }
+
+    function Planet(name) {
+      this.name = name ? name : "";
+      this.position = new Float32Array(4).fill(0)
+
+    }
+
+    var state = {
+      average_amplitude: 0,
+      user: null,
+      planets: new Array(Math.floor(num_planets)).fill(0).map((_, i) => {
+        return new Planet();
+      }),
+      powerups: [],
+      planet_labels: [],
+      nametag_words: [],
+      current_channel: null,
+      target_planets: 1,
+      channels: [],
+      channel_members: [],
+      last_physics_send: init_time,
+      last_projectile_send: init_time,
+      last_asteroid_create: init_time,
+      physics_wait: 1. / 10.,
+      max_time_step: .5,
+      projectiles: [],
+      asteroids: [],
+      grid_scalar: init_scalar,
+      sphere_detail: 8,
+      vertical_gravity: init_scalar / 1.75,
+      horizontal_gravity_scalar: 1.25,
+      default_radius: 6. / init_scalar,
+      max_speed: init_scalar * 1.75,
+      projectiles_speed_scalar: 2,
+      asteroids_speed_scalar: 1.5,
+      temporal_scalar: 1. / 3.,
+      gravitation_scalar: 5.2,
+      camera_speed_scalar: 3.,
+      mouse_position: [0, 0],
+      controls_radius: .5,
+      supernova: 0,
+      delta_move: [0, 0],
+      delta_fire: [0, 0],
+      keyW: false,
+      keyA: false,
+      keyS: false,
+      keyD: false,
+      keyUp: false,
+      keyDown: false,
+      keyLeft: false,
+      keyRight: false,
+      key_speed: 8.,
+      agility: 32.,
+      last_touch_start: -1.,
+      double_tap_threshold: 1. / 3.,
+      firing: false,
+      max_firing_rate: init_firing_rate / 8,
+      camera_position: [0., init_scalar * 100, 0],
+      words_mesh_indices: [],
+      words_mesh_vertices: [],
+      words_mesh_texture_coords: [],
+      words_mesh_shapes: [],
+      stars_mesh_indices: [],
+      stars_mesh_vertices: [],
+      particles_mesh_indices: [],
+      particles_mesh_vertices: [],
+      projectiles_indices: [],
+      projectiles_vertices: [],
+      projectiles_colors: [],
+      projectiles_positions: [],
+
+      asteroids_indices: [],
+      asteroids_vertices: [],
+      asteroids_colors: [],
+      asteroids_positions: [],
+      start_time: init_time,
+      last_time: init_time,
+      frame_count: 0,
+      current_time: 0,
+      universal_time: init_time,
+      respawn_duration: 5., //seconds
+      local_time: init_time,
+      word_list: [],
+      control_decay: 1.,
+      num_stars: 32,
+      particles_per_explosion: 1,
+      explosion_duration: 3.,
+      planet_radius_scalar: 2.,
+      asteroid_radius_scalar: 3.,
+      auto_shoot_scoot: true,
+      asteroids_frequency: .5,
+      explosions: []
+    }
+
+    function respawn_users() {
+      [state.user, state.channel_members].flat().forEach((user) => {
+        if (user.health <= 0 && (state.universal_time * state.temporal_scalar - user.last_death) / state.temporal_scalar > state.respawn_duration) {
+          user.health = init_health
+          user.velocity[0] = state.max_speed * (Math.random() - .5) * 1
+          user.velocity[2] = state.max_speed * (Math.random() - .5) * 1
+          user.position[0] = state.grid_scalar * (Math.random() - .5) * 2.
+          user.position[2] = state.grid_scalar * (Math.random() - .5) * 2.
+        }
+      })
+      const elem = document.getElementById("death-indicator")
+      if (state.user.health <= 0) {
+        elem.style.display = 'block'
+        var time = new Number(state.respawn_duration - (state.universal_time * state.temporal_scalar - state.user.last_death) / state.temporal_scalar).toFixed(1)
+        elem.innerHTML = '' + state.user.last_attacker + ' killed you.<br>Respawn in ' + time + 's.';
+      }
+      else {
+        elem.style.display = 'none'
+      }
+    }
+
+    function load_sound(sound_file_name, sound) {
+      // Create an object with a sound source and a volume control.
+
+      sound.source = state.audio_ctx.createBufferSource();
+      sound.panner = state.audio_ctx.createPanner();
+      // Hook up the sound volume control to the main volume.
+      sound.panner.connect(state.main_volume);
+
+      // Make the sound source loop.
+      sound.source.loop = false;
+
+      // Load a sound file using an ArrayBuffer XMLHttpRequest.
+      var request = new XMLHttpRequest();
+      request.open("GET", sound_file_name, true);
+      request.responseType = "arraybuffer";
+      request.onload = function (e) {
+
+        // Create a buffer from the response ArrayBuffer.
+        state.audio_ctx.decodeAudioData(this.response, function onSuccess(buffer) {
+          sound.buffer = buffer;
+
+          // Make the sound source use the buffer and start playing it.
+          sound.source.buffer = sound.buffer;
+        }, function onFailure() {
+          alert("Decoding the audio buffer failed");
+        });
+      };
+      request.send();
+    }
+
+    function init_audio() {
+      // Detect if the audio context is supported.
+      window.AudioContext = (
+        window.AudioContext ||
+        window.webkitAudioContext ||
+        null
+      );
+
+      if (!AudioContext || state.audio_ctx) {
+        return;
+      }
+
+      // Create a new audio context.
+      state.audio_ctx = new AudioContext();
+
+      function microphone_obtained(stream) {
+        state.microphone = state.audio_ctx.createMediaStreamSource(stream);
+        state.analyser = state.audio_ctx.createAnalyser();
+
+        state.analyser.fftSize = sample_size;
+
+        state.analyser.smoothingTimeConstant = 0.0;
+
+        state.microphone.connect(state.analyser);
+      }
+
+      if (navigator.mediaDevices === undefined) {
+        navigator.mediaDevices = {};
+      }
+
+      // Some browsers partially implement mediaDevices. We can't just assign an object
+      // with getUserMedia as it would overwrite existing properties.
+      // Here, we will just add the getUserMedia property if it's missing.
+      if (navigator.mediaDevices.getUserMedia === undefined) {
+        navigator.mediaDevices.getUserMedia = function (constraints) {
+
+          // First get ahold of the legacy getUserMedia, if present
+          var getUserMedia = navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+
+          // Some browsers just don't implement it - return a rejected promise with an error
+          // to keep a consistent interface
+          if (!getUserMedia) {
+            return Promise.reject(new Error('getUserMedia is not implemented in this browser'));
+          }
+
+          // Otherwise, wrap the call to the old navigator.getUserMedia with a Promise
+          return new Promise(function (resolve, reject) {
+            getUserMedia.call(navigator, constraints, resolve, reject);
+          });
+        }
+      }
+
+      navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+        .then(function (stream) {
+          microphone_obtained(stream)
+        })
+        .catch(function (err) {
+          console.log(err.name + ": " + err.message);
+        });
+
+      // Create a AudioGainNode to control the main volume.
+      state.main_volume = state.audio_ctx.createGain();
+      // Connect the main volume node to the context destination.
+      state.main_volume.connect(state.audio_ctx.destination);
+
+      const pew_sound_names = new Array(Math.floor(num_pew_sounds)).fill(0).map((_, i) => {
+        return "sounds/pew-" + (i + 1) + ".mp3"
+      });
+
+      state.pew_sounds = [];
+
+      for (var i = 0; i < num_pew_sounds; i++) {
+        const sound_file_name = pew_sound_names[i];
+        const sound = {};
+        state.pew_sounds[i] = sound;
+        load_sound(sound_file_name, sound)
+      }
+      const boom_sound_names = new Array(Math.floor(num_boom_sounds)).fill(0).map((_, i) => {
+        return "sounds/boom-" + (i + 1) + ".mp3"
+      });
+
+      state.boom_sounds = [];
+
+      for (var i = 0; i < num_boom_sounds; i++) {
+        const sound_file_name = boom_sound_names[i];
+        const sound = {};
+        state.boom_sounds[i] = sound;
+        load_sound(sound_file_name, sound)
+      }
+    }
+
+    function update_planets() {
+      if (state.websocket && state.channel_members.length) {
+        state.target_planets = state.channel_members.length + 2;
+      }
+      else {
+        state.target_planets = Math.min(state.target_planets + state.delta_time / Math.PI, 8.)
+      }
+
+      if (Math.abs(num_planets - state.target_planets) > state.physics_wait) {
+        var dir = (state.target_planets - num_planets);
+        num_planets += Math.sign(dir) * state.delta_time
+        state.planets = new Array(Math.floor(1. - 1.E-16 + num_planets)).fill(0).map((_, i) => {
+          return new Planet(default_planet_names[i]);
+        })
+        state.planet_labels = state.planets.map((planet, i) => {
+          var word = new Words(null, default_planet_names[i], planet.position, state.current_time);
+          return word;
+        })
+      }
+      state.planets.forEach((p, i) => {
+        var iteration = (i) * Math.PI * 2. / Math.max(num_planets - 1, 1) - state.universal_time / Math.PI * state.temporal_scalar
+        var growth = Math.max(Math.min(1., num_planets - i), 0.);
+        p.position[0] = state.grid_scalar * Math.min(i, 1.) * Math.cos(iteration) * 1.1235 * growth
+        p.position[2] = state.grid_scalar * Math.min(i, 1.) * Math.sin(iteration) * 1.1235 * growth
+        //p.position[1] = -gravity(p.position);
+        p.position[3] = (.75 - Math.min(i, 1.) * .125) * growth;
+      })
+    }
+
+    function update_planet_collisions(objects) {
+      const new_objects = []
+      objects.forEach((object) => {
+        var hit = false;
+        state.planets.forEach((planet) => {
+          const dist = glMatrix.vec2.length([planet.position[0] - object.position[0],
+          planet.position[2] - object.position[2]]);
+          if (dist < (planet.position[3] + state.default_radius * state.grid_scalar) * state.planet_radius_scalar * 2.) {
+            hit = true;
+            var midpoint = glMatrix.vec3.add(glMatrix.vec3.create(), planet.position, object.position)
+            midpoint = glMatrix.vec3.scale(midpoint, midpoint, 1. / 2.)
+            var vel = object.velocity;
+            vel = [vel[0], vel[1] - state.max_speed, vel[2], vel[3]]
+            play_boom(midpoint, Math.floor(Math.random() * 2));
+            state.explosions.push(new Explosion(midpoint, vel))
+          }
+        })
+        if (!hit) new_objects.push(object);
+      })
+      return new_objects;
+    }
+
+    function play_pew(pos) {
+      if (state.audio_ctx) {
+        pos = glMatrix.mat4.mul(glMatrix.vec4.create(), state.view_matrix, [pos[0], pos[1], pos[2], 1.]);
+        const sound = state.pew_sounds[Math.floor(Math.random() * num_pew_sounds)]
+        sound.source = state.audio_ctx.createBufferSource();
+        sound.source.buffer = sound.buffer;
+        sound.source.connect(sound.panner);
+        // console.log(pos[0]/pos[3]/state.grid_scalar, pos[1]/pos[3]/state.grid_scalar, pos[2]/pos[3]/state.grid_scalar)
+        sound.panner.setPosition(pos[0] / pos[3] / state.grid_scalar, pos[1] / pos[3] / state.grid_scalar, pos[2] / pos[3] / state.grid_scalar);
+        // sound.panner.setVelocity(projectile.velocity[0], projectile.velocity[1], projectile.velocity[2]);
+        sound.source.start(state.audio_ctx.currentTime);
+      }
+    }
+
+    function play_heal() {
+
+    }
+    function play_boost() {
+
+    }
+
+    function play_boom(pos, level = 0) {
+      if (state.audio_ctx) {
+        pos = glMatrix.mat4.mul(glMatrix.vec4.create(), state.view_matrix, [pos[0], pos[1], pos[2], 1.]);
+        const sound = state.boom_sounds[level]
+        sound.source = state.audio_ctx.createBufferSource();
+        sound.source.buffer = sound.buffer;
+        sound.source.connect(sound.panner);
+        // console.log(pos[0]/pos[3]/state.grid_scalar, pos[1]/pos[3]/state.grid_scalar, pos[2]/pos[3]/state.grid_scalar)
+        sound.panner.setPosition(pos[0] / pos[3] / state.grid_scalar, pos[1] / pos[3] / state.grid_scalar, pos[2] / pos[3] / state.grid_scalar);
+        // sound.panner.setVelocity(projectile.velocity[0], projectile.velocity[1], projectile.velocity[2]);
+        sound.source.start(state.audio_ctx.currentTime);
+      }
+    }
+
+    function update_projectile_collisions() {
+
+      [state.user, state.channel_members].flat().forEach((object) => {
+
+        state.powerups = state.powerups.filter((powerup) => {
+          let hit = false;
+          const dist = glMatrix.vec2.length([powerup.position[0] - object.position[0],
+          powerup.position[2] - object.position[2]]);
+          if (dist < (powerup.position[3] + state.default_radius * state.grid_scalar) * state.asteroid_radius_scalar * 2.) {
+            hit = true;
+            var midpoint = glMatrix.vec3.add(glMatrix.vec3.create(), powerup.position, object.position)
+            midpoint = glMatrix.vec3.scale(midpoint, midpoint, 1. / 2.)
+            if (state.user.health > 0) {
+              if (powerup.is_health) {
+                state.user.health += init_health / 4;
+                state.user.health = Math.min(state.user.health, init_health * 2)
+                play_heal(midpoint, 2);
+
+                send_command(OP_SAY, { message: "/died " + "A health powerup." }, [[state.user.health, state.universal_time, 0., 0.],
+                [midpoint[0], midpoint[1], midpoint[2], 0.], state.user.velocity, state.user.position]);
+                state.user.last_death = state.universal_time * state.temporal_scalar
+                state.user.last_attacker = "A health powerup."
+                state.explosions.push(new Explosion(midpoint, state.user.velocity))
+
+                appendConsole("An anomaly repaired you.\n")
+              } else {
+                state.user.firing_rate /= 1.5;
+                state.user.firing_rate = Math.max(state.max_firing_rate, state.user.firing_rate)
+                play_boost(midpoint, 2);
+                appendConsole("An anomaly boosted your firing rate.\n")
+              }
+            }
+          }
+          return !hit;
+        })
+      })
+
+      const new_projectiles = []
+      state.projectiles.forEach((projectile) => {
+        const new_asteroids = []
+        state.projectiles.filter((p) => { return p.creator.name != projectile.creator.name }).forEach((projectile_b) => {
+          const dist = glMatrix.vec2.length([projectile_b.position[0] - projectile.position[0],
+          projectile_b.position[2] - projectile.position[2]]);
+          if (dist < (projectile_b.position[3] + projectile.position[3]) * state.grid_scalar * 2.) {
+            projectile.hit = true;
+            projectile_b.hit = true;
+            var midpoint = glMatrix.vec3.add(glMatrix.vec3.create(), projectile_b.position, projectile.position)
+            midpoint = glMatrix.vec3.scale(midpoint, midpoint, 1. / 2.)
+            state.explosions.push(new Explosion(midpoint, projectile.velocity))
+
+            play_boom(midpoint, 0);
+          }
+          else {
+          }
+        })
+        state.asteroids.forEach((asteroid) => {
+          const dist = glMatrix.vec2.length([asteroid.position[0] - projectile.position[0],
+          asteroid.position[2] - projectile.position[2]]);
+          if (dist < (asteroid.position[3] + state.default_radius * state.grid_scalar) * state.asteroid_radius_scalar * 2.) {
+            projectile.hit = true;
+            var midpoint = glMatrix.vec3.add(glMatrix.vec3.create(), asteroid.position, projectile.position)
+            midpoint = glMatrix.vec3.scale(midpoint, midpoint, 1. / 2.)
+            state.explosions.push(new Explosion(midpoint, projectile.velocity))
+
+            play_boom(midpoint, 0);
+
+            if (asteroid.is_powerup > powerup_rareness) {
+              state.powerups.push(new Powerup([midpoint[0], midpoint[1], midpoint[2], state.default_radius], asteroid.velocity, asteroid.created, asteroid.is_powerup))
+            }
+          }
+          else {
+            new_asteroids.push(asteroid)
+          }
+        })
+
+        const user = state.user;
+        const dist = glMatrix.vec2.length([user.position[0] - projectile.position[0],
+        user.position[2] - projectile.position[2]]);
+        if (projectile.creator.name != user.name && user.health > 0 && dist < (user.position[3] + state.default_radius) * state.grid_scalar) {
+          projectile.hit = true;
+          var midpoint = glMatrix.vec3.add(glMatrix.vec3.create(), user.position, projectile.position)
+          midpoint = glMatrix.vec3.scale(midpoint, midpoint, 1. / 2.)
+          state.explosions.push(new Explosion(midpoint, projectile.velocity))
+
+          play_boom(midpoint, 1);
+
+
+          user.health -= init_health / 4;
+          send_command(OP_SAY, { message: "/died " + projectile.creator.name }, [[user.health, state.universal_time, 0., 0.],
+          [midpoint[0], midpoint[1], midpoint[2], 0.], projectile.velocity, state.user.position]);
+          if (user.health <= 0) {
+            user.last_death = state.universal_time * state.temporal_scalar
+            user.last_attacker = projectile.creator.name
+            user.firing_rate = init_firing_rate
+            appendConsole("" + user.last_attacker + " destroyed you.\n")
+
+            state.explosions.push(new Explosion(midpoint, projectile.velocity))
+            state.delta_fire = [0, 0]
+            state.delta_move = [0, 0]
+            state.projectiles = state.projectiles.filter((p) => { return p.creator.name != state.user.name })
+
+            play_boom(midpoint, 2);
+          }
+        }
+        state.asteroids = new_asteroids
+      })
+      state.projectiles = state.projectiles.filter((p) => { return !p.hit });
+
+      const object = state.user
+      state.asteroids = state.asteroids.filter((asteroid) => {
+        let hit = false;
+        const dist = glMatrix.vec2.length([asteroid.position[0] - object.position[0],
+        asteroid.position[2] - object.position[2]]);
+        if (dist < (asteroid.position[3] + state.default_radius * state.grid_scalar) * state.asteroid_radius_scalar * 2.) {
+          hit = true;
+          var midpoint = glMatrix.vec3.add(glMatrix.vec3.create(), asteroid.position, object.position)
+          midpoint = glMatrix.vec3.scale(midpoint, midpoint, 1. / 2.)
+          state.explosions.push(new Explosion(midpoint, object.velocity))
+          if (state.user.health > 0) {
+            state.user.health -= init_health / 2;
+
+            play_boom(midpoint, 2);
+
+            send_command(OP_SAY, { message: "/died " + "An asteroid" }, [[state.user.health, state.universal_time, 0., 0.],
+            [midpoint[0], midpoint[1], midpoint[2], 0.], state.user.velocity, state.user.position]);
+            if (state.user.health <= 0) {
+              state.user.last_death = state.universal_time * state.temporal_scalar
+              state.user.last_attacker = "An asteroid"
+              state.user.firing_rate = init_firing_rate
+              state.explosions.push(new Explosion(midpoint, state.user.velocity))
+
+              appendConsole("An asteroid destroyed you.\n")
+
+              state.delta_fire = [0, 0]
+              state.delta_move = [0, 0]
+              state.projectiles = state.projectiles.filter((p) => { return p.creator.name != state.user.name })
+            }
+          }
+        }
+        return !hit;
+      })
+      state.planets.forEach((planet, index) => {
+        const dist = glMatrix.vec2.length([planet.position[0] - state.user.position[0],
+        planet.position[2] - state.user.position[2]]);
+        if (dist < (planet.position[3] + state.default_radius * state.grid_scalar) * state.planet_radius_scalar * 2.) {
+          var midpoint = glMatrix.vec3.add(glMatrix.vec3.create(), planet.position, state.user.position)
+          midpoint = glMatrix.vec3.scale(midpoint, midpoint, 1. / 2.)
+          var vel = state.user.velocity;
+          vel = [vel[0], vel[1] - state.max_speed, vel[2], vel[3]]
+          if (state.user.health > 0) {
+            state.explosions.push(new Explosion(midpoint, vel))
+            state.user.health = 0;
+
+            play_boom(midpoint, 2);
+
+            send_command(OP_SAY, { message: "/died " + default_planet_names[index] }, [[state.user.health,
+            state.universal_time, 0., 0.],
+            [midpoint[0], midpoint[1], midpoint[2], 0.], state.user.velocity, state.user.position]);
+            state.user.last_death = state.universal_time * state.temporal_scalar
+            state.user.last_attacker = default_planet_names[index]
+            state.user.firing_rate = init_firing_rate
+            state.explosions.push(new Explosion(midpoint, state.user.velocity))
+
+            appendConsole("" + state.user.last_attacker + " destroyed you.\n")
+
+            state.delta_fire = [0, 0]
+            state.delta_move = [0, 0]
+            state.projectiles = state.projectiles.filter((p) => { return p.creator.name != state.user.name })
+          }
+        }
+      })
+    }
+
+    function appendConsole(mes) {
+      const output = document.getElementById('output');
+      output.value += "> " + mes;
+      output.scrollTop = output.scrollHeight;
+    }
+
+    function connect() {
+      if (state.websocket) try {
+        state.websocket.close()
+      } catch (e) { }
+
+      state.websocket = new WebSocket((window.location.protocol.endsWith('https:') ? 'wss://' : 'ws://') + window.location.host + '/websockets')
+      state.websocket.binaryType = 'arraybuffer'
+
+      state.websocket.onclose = () => {
+        document.getElementById("connect-page").style.display = 'block';
+        document.getElementById("lobby-page").style.display = 'none';
+        document.getElementById("chat-page").style.display = "none";
+        state.current_channel = null;
+        state.channel_members = []
+        state.user.name = ""
+        state.websocket = null
+      };
+
+      state.websocket.onopen = (function () {
+        state.user.name = ""
+        document.getElementById("connect-page").style.display = 'none';
+        document.getElementById("lobby-page").style.display = "block";
+        document.getElementById("chat-page").style.display = "none";
+      });
+
+      function ab2str(buf) {
+        return String.fromCharCode.apply(null, new Uint8Array(buf));
+      }
+
+      state.websocket.onmessage = (function (event) {
+        var view = new DataView(event.data);
+        var offset = 0
+        var opcode = view.getUint8(offset++)
+        var position = [view.getFloat32(offset), view.getFloat32(offset + 4), view.getFloat32(offset + 8), view.getFloat32(offset + 12)]
+        offset += 16
+        var orientation = [view.getFloat32(offset), view.getFloat32(offset + 4), view.getFloat32(offset + 8), view.getFloat32(offset + 12)]
+        offset += 16
+        var velocity = [view.getFloat32(offset), view.getFloat32(offset + 4), view.getFloat32(offset + 8), view.getFloat32(offset + 12)]
+        offset += 16
+        var angular_velocity = [view.getFloat32(offset), view.getFloat32(offset + 4), view.getFloat32(offset + 8), view.getFloat32(offset + 12)]
+        offset += 16
+        state.universal_time = view.getFloat32(offset) / 1E3
+        offset += 4
+        var length = view.getUint32(offset)
+        offset += 4;
+        var since_last = view.getFloat32(offset)
+        offset += 4;
+        var audio_signal = ab2str(view.buffer.slice(offset, offset + length))
+        var metadata = JSON.parse(ab2str(view.buffer.slice(offset + length)))
+
+        var message = {
+          opcode,
+          since_last,
+          audio_signal,
+          position,
+          velocity,
+          orientation,
+          angular_velocity,
+          metadata
+        }
+
+        // console.log(message)
+        const data = message.metadata
+
+        if (data.server || data.error) {
+          appendConsole((data.server ? data.server : data.error) + '\n')
+        }
+        else if (opcode == OP_NAME) {
+          if (!state.user.name) {
+            document.getElementById("channels-page").style.display = 'block';
+          }
+          document.getElementById("assigned-name").innerHTML = data.name
+          document.getElementById("display_name").value = data.name
+          state.user.name = data.name;
+          appendConsole("Your new name is now: " + data.name + '\n');
+          state.user.last_death = state.universal_time * state.temporal_scalar;
+        }
+        else if (opcode == OP_LIST) {
+          if (data.users) {
+            appendConsole("The current user list of channel " + data.channel + " is: " + data.users.reduce((acc, user, index) => acc + user.name + (index != data.users.length - 1 ? ", " : ".\n"), ""));
+          }
+          else if (data.channels) {
+            appendConsole("The current list of public channels is:\n" + data.channels.reduce((acc, channel, index) => acc + channel.name + " (" + channel.occupancy + "/" + channel.max + ")\n", ""));
+
+            const start = "<h1>"
+            const end = "</h1>"
+            document.getElementById("listing").innerHTML = start + "Name" + end + start + "Players" + end + start + "Max" + end + start + "Action" + end +
+              data.channels.reduce((acc, channel, index) =>
+                acc + start + channel.name + end + start + channel.occupancy + end + start + channel.max + end +
+                '<button onclick="send_command(' + OP_JOIN + ', { channel: \'' + channel.name + '\' } )"">Join</button>',
+                "")
+          }
+        }
+        else if (opcode == OP_JOIN) {
+          // console.log(data)
+          if (state.user.name == data.name) {
+            document.getElementById("lobby-page").style.display = "none";
+            document.getElementById("chat-page").style.display = "block";
+            appendConsole("You joined channel \"" + data.channel + '\".\n')
+            appendConsole('The channel now contains the following users:\n' + data.users.reduce((acc, user, index) => acc + user.name + "\n", ""));
+            //state.word_list.push(new Words(state.user.name, state.user.name, state.user.position, state.current_time));
+            state.current_channel = data.channel
+            state.channel_members = data.users.filter(user => user.name != state.user.name).map((user => new User(user.name)))
+            state.nametag_words = state.channel_members.map(user => {
+              return new Words(user.name, user.name, user.position, state.current_time)
+            })
+            state.user.init_health = init_health
+            state.user.firing_rate = init_firing_rate
+            // toggle_collapse()
+          }
+          else {
+            appendConsole("\"" + data.name + '\"' + ' joined the channel.\n')
+            var user = new User(data.name)
+            state.channel_members.push(user)
+            // state.word_list.push(new Words(user.name, user.name, user.position, state.current_time));
+            state.nametag_words = state.channel_members.map(user => {
+              return new Words(user.name, user.name, user.position, state.current_time)
+            })
+          }
+        }
+        else if (opcode == OP_LEAVE) {
+          // console.log(message)
+          if (data.name == state.user.name) {
+            document.getElementById("lobby-page").style.display = "block";
+            document.getElementById("chat-page").style.display = "none";
+            appendConsole("You exited channel \"" + state.current_channel + '\"\n');
+            state.current_channel = null
+            state.channel_members = []
+            state.word_list = []
+          }
+          else {
+            appendConsole("\"" + data.name + "\" exited the channel.\n");
+            state.channel_members = state.channel_members.filter(user => user.name != data.name)
+            state.word_list = state.word_list.filter(word => word.said_name != data.name)
+          }
+        }
+        else if (opcode == OP_SAY) {
+          var user = null;
+          if (data.message) {
+            if (data.message == "/chatter") {
+              if (state.audio_ctx && message.audio_signal && data.name != state.user.name) {
+                user = state.channel_members.filter((u) => u.name == data.name)[0]
+                user.audio_clips.push([message.since_last, message.audio_signal])
+              }
+            } else if (data.message == "/asteroid") {
+              user = state.channel_members.filter((u) => u.name == data.name)[0]
+              var pos = message.position;
+              var time = message.orientation[0]
+              var is_powerup = message.orientation[1]
+              var asteroid = new Asteroid([pos[0], pos[1], pos[2], pos[3]], message.velocity, time)
+              asteroid.is_powerup = is_powerup
+              if (data.name != state.user.name) state.asteroids.push(asteroid);
+            } else if (data.message == "/pew") {
+              user = state.user.name == data.name ? state.user : state.channel_members.filter((u) => u.name == data.name)[0]
+              if (user.name != state.user.name) {
+                var pos = message.position;
+                var projectile = new Projectile([pos[0], pos[1], pos[2], pos[3]], message.velocity, user)
+                state.projectiles.push(projectile);
+                play_pew(projectile.position)
+              }
+            } else if (data.message.slice(0, 5) == "/died") {
+              user = state.user.name == data.name ? state.user : state.channel_members.filter((u) => u.name == data.name)[0]
+              if (user.name != state.user.name) {
+                var killer = data.message.slice(6);
+                user.health = message.position[0]
+                user.last_attacker = killer
+                state.explosions.push(new Explosion(message.orientation, message.velocity))
+                play_boom(message.orientation, Math.floor(Math.random() * 2));
+                if (user.health <= 0) {
+                  play_boom(message.orientation, 2);
+                  appendConsole("" + (user.last_attacker == state.user.name ? "You" : user.last_attacker) + " destroyed " + user.name + "\n")
+                  user.last_death = message.position[1] * state.temporal_scalar
+                  user.firing_rate = init_firing_rate
+                  state.explosions.push(new Explosion(message.orientation, message.velocity))
+                  state.projectiles = state.projectiles.filter((p) => { return p.creator.name != user.name })
+                }
+              }
+            } else {
+              var user;
+              if (data.name == state.user.name) {
+                appendConsole("You said : " + data.message + '\n');
+                user = state.user
+              }
+              else {
+                appendConsole(data.name + ' says: ' + data.message + '\n');
+                user = state.channel_members.filter((u) => u.name == data.name)[0]
+              }
+              state.word_list.push(new Words(null, data.message, JSON.parse(JSON.stringify(user.position)), state.current_time));
+            }
+          }
+          else if (data.name != state.user.name) {
+            user = state.channel_members.filter((u) => u.name == data.name)[0]
+            function b_to_a(a, b) {
+              a[0] = b[0];
+              a[1] = b[1];
+              a[2] = b[2];
+              a[3] = b[3];
+            }
+
+            b_to_a(user.position, message.position);
+            b_to_a(user.velocity, message.velocity);
+            b_to_a(user.orientation, message.orientation);
+            b_to_a(user.angular_velocity, message.angular_velocity);
+          }
+          else if (data.sayer) {
+            appendConsole(data.sayer + " says: " + data.says + "\n");
+          }
+        }
+      });
+    }
+    window.onload = () => {
+      window.pipeline = new OpenGLPipeline(pipeline_json);
+      state.word_list = []
+      state.user = new User();
+      state.user.position = [(Math.random() * 2. - 1.) * state.grid_scalar, 0., (Math.random() * 2. - 1.) * state.grid_scalar, state.user.position[3]]
+      var canvas = pipeline.contexts[pipeline.contexts.length - 1].canvas;
+
+
+      var element = document.getElementById('output-context');
+      document.getElementById("output-context").onmousedown = () => {
+        init_audio();
+
+        state.control_decay = 0.1;
+        //canvas.requestPointerLock()
+        state.firing = true;
+        var move_len = Math.sqrt(state.delta_move[0] * state.delta_move[0] + state.delta_move[1] * state.delta_move[1])
+
+        if (move_len) {
+          state.delta_fire = [state.delta_move[0], state.delta_move[1]];
+        } else {
+          state.delta_fire = [0, 0];
+        }
+      }
+      document.getElementById("output-context").onmouseup = () => {
+        state.firing = false;
+        state.delta_fire = [0, 0];
+      }
+
+      window.addEventListener('resize', () => {
+        pipeline.contexts[pipeline.contexts.length - 1].resizeCanvas()
+      });
+
+      document.body.onmousemove = (e) => {
+        state.mouse_position = [e.pageX / canvas.offsetWidth, 1. - (e.pageY) / canvas.offsetHeight]
+        if (e.movementX || e.movementY) {
+          state.delta_fire = state.firing ? [state.delta_fire[0] + e.movementX / canvas.offsetWidth, state.delta_fire[1] + (e.movementY) / canvas.offsetHeight] : [0, 0]
+          state.delta_move = [state.delta_move[0] + e.movementX / canvas.offsetWidth, state.delta_move[1] + (e.movementY) / canvas.offsetHeight]
+        }
+      };
+
+      var touchesInAction = {};
+      document.body.ontouchend = (e) => {
+        var touches = e.touches;
+        var movementInfo;
+        var firingInfo;
+
+        for (var j = 0; j < touches.length; j++) {
+          movementInfo = movementInfo ? movementInfo : touchesInAction["$" + touches[j].identifier];
+          firingInfo = firingInfo ? firingInfo : touchesInAction["#" + touches[j].identifier];
+        }
+        if (!movementInfo) {
+          state.delta_move = [0, 0]
+        }
+        if (!firingInfo) {
+          state.delta_fire = [0, 0]
+        }
+      }
+      document.body.ontouchstart = (e) => {
+        init_audio();
+        // canvas.requestPointerLock()
+        // if (document.body.requestFullscreen) {
+        //   document.body.requestFullscreen();
+        // } else if (document.body.webkitRequestFullscreen) { /* Safari */
+        //   document.body.webkitRequestFullscreen();
+        // } else if (document.body.msRequestFullscreen) { /* IE11 */
+        //   document.body.msRequestFullscreen();
+        // }
+        state.control_decay = 0.;
+        var fire_len = Math.sqrt(state.delta_fire[0] * state.delta_fire[0] + state.delta_fire[1] * state.delta_fire[1]);
+        if (fire_len > state.grid_scalar / 1E8 && (e.changedTouches.length > 1 || state.current_time - state.last_touch_start < state.double_tap_threshold)) {
+          state.delta_fire = [0, state.controls_radius / 2.]
+        }
+        state.last_touch_start = state.current_time;
+        var touches = e.touches;
+
+        var moving_touch, firing_touch;
+
+        for (var j = 0; j < touches.length; j++) {
+          var movementInfo = touchesInAction["$" + touches[j].identifier];
+          if (movementInfo) {
+            moving_touch = movementInfo;
+            movementInfo.dx = 0;
+            movementInfo.dy = 0;
+            movementInfo.pageX = touches[j].pageX;
+            movementInfo.pageY = touches[j].pageY;
+          }
+          var firingInfo = touchesInAction["#" + touches[j].identifier];
+          if (firingInfo) {
+            firing_touch = firingInfo;
+            firingInfo.dx = 0;
+            firingInfo.dy = 0;
+            firingInfo.pageX = touches[j].pageX;
+            firingInfo.pageY = touches[j].pageY;
+          }
+        }
+        var touch_index = 0
+        if (!moving_touch && touches.length > touch_index) {
+          touchesInAction["$" + touches[touch_index].identifier] = {
+            pageX: touches[touch_index].pageX,
+            pageY: touches[touch_index].pageY
+          };
+        }
+        touch_index = 1;
+        if (!firing_touch && touches.length > touch_index) {
+          touchesInAction["#" + touches[touch_index].identifier] = {
+            pageX: touches[touch_index].pageX,
+            pageY: touches[touch_index].pageY
+          };
+        }
+      }
+      document.body.ontouchmove = (e) => {
+        e.preventDefault()
+        var touches = e.changedTouches;
+
+        var moving_touch, firing_touch;
+
+        for (var j = 0; j < touches.length; j++) {
+          var movementInfo = touchesInAction["$" + touches[j].identifier];
+          if (movementInfo) {
+            moving_touch = movementInfo;
+            movementInfo.dx = touches[j].pageX - movementInfo.pageX;  /* x-distance moved since touchstart */
+            movementInfo.dy = touches[j].pageY - movementInfo.pageY;  /* y-distance moved since touchstart */
+            movementInfo.pageX = touches[j].pageX;
+            movementInfo.pageY = touches[j].pageY;
+          }
+          var firingInfo = touchesInAction["#" + touches[j].identifier];
+          if (firingInfo) {
+            firing_touch = firingInfo;
+            firingInfo.dx = touches[j].pageX - firingInfo.pageX;  /* x-distance moved since touchstart */
+            firingInfo.dy = touches[j].pageY - firingInfo.pageY;  /* y-distance moved since touchstart */
+            firingInfo.pageX = touches[j].pageX;
+            firingInfo.pageY = touches[j].pageY;
+          }
+        }
+
+        var touch_speed = 10.;
+
+        /* determine what gesture was performed, based on dx and dy (tap, swipe, one or two fingers etc. */
+        var dx = moving_touch ? moving_touch.dx : 0
+        var dy = moving_touch ? moving_touch.dy : 0
+        dx *= touch_speed;
+        dy *= touch_speed;
+        state.delta_move = [state.delta_move[0] + dx / canvas.offsetWidth, state.delta_move[1] + (dy) / canvas.offsetHeight]
+
+        var dx2 = firing_touch ? firing_touch.dx : 0
+        var dy2 = firing_touch ? firing_touch.dy : 0
+        dx2 *= touch_speed;
+        dy2 *= touch_speed;
+        state.delta_fire = [state.delta_fire[0] + dx2 / canvas.offsetWidth, state.delta_fire[1] + (dy2) / canvas.offsetHeight]
+      }
+
+      function onKeyDown(event) {
+        init_audio();
+        var keyCode = event.keyCode;
+
+        if (state.auto_shoot_scoot) {
+          state.keyD = false;
+          state.keyS = false;
+          state.keyA = false;
+          state.keyW = false;
+          state.keyUp = false;
+          state.keyDown = false;
+          state.keyLeft = false;
+          state.keyRight = false;
+        }
+        state.auto_shoot_scoot = false;
+        switch (keyCode) {
+          case 32: //space
+            state.auto_shoot_scoot = true;
+            break;
+          case 68: //d
+            state.keyD = true;
+            break;
+          case 83: //s
+            state.keyS = true;
+            break;
+          case 65: //a
+            state.keyA = true;
+            break;
+          case 87: //w
+            state.keyW = true;
+            break;
+
+          case 38: //up
+            state.keyUp = true;
+            break;
+          case 40: //down
+            state.keyDown = true;
+            break;
+          case 37: //left
+            state.keyLeft = true;
+            break;
+          case 39: //right
+            state.keyRight = true;
+            break;
+        }
+      }
+
+      function onKeyUp(event) {
+        var keyCode = event.keyCode;
+
+        switch (keyCode) {
+          case 68: //d
+            state.keyD = false;
+            break;
+          case 83: //s
+            state.keyS = false;
+            break;
+          case 65: //a
+            state.keyA = false;
+            break;
+          case 87: //w
+            state.keyW = false;
+            break;
+
+          case 38: //up
+            state.keyUp = false;
+            break;
+          case 40: //down
+            state.keyDown = false;
+            break;
+          case 37: //left
+            state.keyLeft = false;
+            break;
+          case 39: //right
+            state.keyRight = false;
+            break;
+        }
+      }
+
+      document.body.addEventListener("keydown", onKeyDown, false);
+      document.body.addEventListener("keyup", onKeyUp, false);
+
+      reload_atlas()
+      reload_atlas_attributes();
+      reload_stars_attributes();
+      pipeline.renderLoop()
+    }
+    function send_command(opcode, metadata, physics_data) {
+      var time = new Date().getTime() / 1E3
+      var since_last = state.last_transmit ? time - state.last_transmit : 0;
+      var spacio_temporal = physics_data ? physics_data : [state.user.position, state.user.orientation, state.user.velocity, state.user.angular_velocity];
+      spacio_temporal[1][3] = state.current_time;
+      spacio_temporal = spacio_temporal.map(v => [v[0], v[1], v[2], v[3]]).flat()
+      var audio_signal = state.audio_signal ? state.audio_signal : new Uint8Array(0);
+      var signal_length = state.audio_signal ? audio_signal.length : 0
+      var json_string = JSON.stringify(metadata)
+
+      var message = new DataView(new Uint8Array(1 + 4 * 4 * 4 + 3 * 4 + signal_length + json_string.length).buffer)
+
+      var offset = 0;
+
+      message.setUint8(offset, opcode)
+      offset++;
+
+      for (var element of spacio_temporal) {
+        message.setFloat32(offset, element)
+        offset += 4;
+      }
+      message.setFloat32(offset, 0)
+      offset += 4;
+      message.setUint32(offset, signal_length)
+      offset += 4;
+      message.setFloat32(offset, since_last)
+      offset += 4;
+
+      for (var i = 0; i < signal_length; i++) {
+        message.setUint8(offset, audio_signal[i])
+        offset++;
+      }
+
+      var index = 0;
+      for (var char of json_string) {
+        message.setUint8(offset, json_string.charCodeAt(index++))
+        offset += 1;
+      }
+      if (state.websocket) state.websocket.send(message.buffer);
+    }
+
+    function set_name() {
+      send_command(OP_NAME, { name: document.getElementById("display_name").value })
+    }
+
+    function enter_command() {
+      var command = document.getElementById("command");
+      send_command(OP_SAY, { message: command.value })
+      // appendConsole(command.value + '\n')
+      command.value = ''
+    }
+    function create_join_channel() {
+      var name = document.getElementById("channel-name");
+      var password = document.getElementById("password");
+      appendConsole("Attempting to create/join channel: \"" + name.value + '\"\n')
+      send_command(OP_JOIN, { channel: name.value, password: password.value })
+    }
+    function leave_channel() {
+      if (state.current_channel)
+        send_command(OP_LEAVE, { name: document.getElementById("display_name").value })
+      else
+        appendConsole("Cannot leave channel; you are not currently in one!\n")
+    }
+
+    function toggle_collapse() {
+      var collapsible = document.getElementById("main-window");
+      if (collapsible.style.display != "block") {
+        collapsible.style.display = "block";
+        document.getElementById("hamburger").checked = true;
+
+      } else {
+        collapsible.style.display = "none";
+        document.getElementById("hamburger").checked = false;
+      }
+    }
+
+    function reload_atlas() {
+
+      var shape = [512, 512]
+      var canvas = state.atlas_canvas ? state.atlas_canvas : document.createElement('canvas')
+      document.body.append(canvas)
+      const font_size = 32;
+      shape = shape.slice()
+      canvas.width = shape[0]
+      canvas.height = shape[1]
+
+      var ctx = canvas.getContext('2d')
+      ctx.fillStyle = '#000'
+      ctx.globalAlpha = 0.0;
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+      ctx.fillStyle = '#fff'
+      ctx.globalAlpha = 1.0;
+      ctx.font = 'bold ' + font_size + 'px monospace';
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'top'
+
+      ctx.shadowColor = "purple";
+      ctx.shadowBlur = font_size / 8.;
+      var x = font_size / 2
+      var y = font_size / 2
+      state.words_mesh_texture_coords = [];
+      state.words_mesh_shapes = []
+      var w = shape[0]
+      var h = shape[1]
+
+      const all_words = [state.planet_labels, state.word_list, state.nametag_words].flat();
+      for (var i = 0; i < all_words.length; i++) {
+        var words = all_words[i].said_words
+        var metrics = ctx.measureText(words)
+        if ((x + metrics.width) > shape[0]) (x = font_size / 2), (y += font_size * 2)
+        ctx.fillText(words, x, y)
+        var W = metrics.width / font_size + 2;
+        var H = 2.;
+        state.words_mesh_texture_coords.push([-W / 2, -H / 2, ((x - font_size / 2)) / w, ((y + font_size / 2) + font_size) / h])
+        state.words_mesh_texture_coords.push([W / 2, -H / 2, ((x + font_size / 2) + metrics.width) / w, ((y + font_size / 2) + font_size) / h])
+        state.words_mesh_texture_coords.push([W / 2, H / 2, ((x + font_size / 2) + metrics.width) / w, (y - font_size / 2) / h])
+        state.words_mesh_texture_coords.push([-W / 2, H / 2, (x - font_size / 2) / w, (y - font_size / 2) / h])
+
+        var delta_x = 0
+        var delta_y = 0
+
+        state.words_mesh_shapes.push([
+          delta_x, delta_y, W, H
+        ])
+        state.words_mesh_shapes.push([
+          delta_x, 1 - delta_y, W, H
+        ])
+        state.words_mesh_shapes.push([
+          1 - delta_x, 1 - delta_y, W, H
+        ])
+        state.words_mesh_shapes.push([
+          1 - delta_x, delta_y, W, H
+        ])
+        x += W * font_size
+      }
+
+      state.atlas_canvas = canvas
+    }
+
+    function reload_atlas_attributes() {
+      state.words_mesh_indices = [];
+      state.words_mesh_vertices = [];
+      var index_counter = 0
+
+      const all_words = [state.planet_labels, state.word_list, state.nametag_words].flat();
+
+      for (var i = 0; i < all_words.length; i++) {
+        var X = all_words[i].position[0]
+        var Y = -gravity(all_words[i].position) + state.grid_scalar / 5.
+        var Z = all_words[i].position[2]
+        state.words_mesh_vertices.push([
+          X, Y, Z, 1
+        ])
+        state.words_mesh_vertices.push([
+          X, Y, Z, 1
+        ])
+        state.words_mesh_vertices.push([
+          X, Y, Z, 1
+        ])
+        state.words_mesh_vertices.push([
+          X, Y, Z, 1
+        ])
+        state.words_mesh_indices.push(index_counter)
+        state.words_mesh_indices.push(index_counter + 1)
+        state.words_mesh_indices.push(index_counter + 2)
+        state.words_mesh_indices.push(index_counter)
+        state.words_mesh_indices.push(index_counter + 2)
+        state.words_mesh_indices.push(index_counter + 3)
+        index_counter += 4;
+      }
+    }
+
+    function load_avatars_attribles() {
+      state.avatars_indices = [];
+      state.avatars_vertices = [];
+      state.avatars_colors = [];
+      state.avatars_positions = [];
+
+      const all_users = [state.user, state.channel_members].flat();
+      var index_counter = 0;
+      var loop_counter = 0;
+      for (const user of all_users) {
+        if (user.health <= 0) continue;
+        var vel = glMatrix.vec3.normalize(glMatrix.vec3.create(), user.velocity)
+
+        var angle = Math.atan2(vel[2], vel[0]);
+
+        var X = -user.position[0] / state.grid_scalar / 2.;
+        var Y = 0.;
+        var Z = -user.position[2] / state.grid_scalar / 2.;
+
+        var size = state.default_radius;
+
+        const red_blue = loop_counter % 2;
+
+        state.avatars_colors.push([red_blue, 0., 1. - red_blue, 1.])
+        state.avatars_colors.push([red_blue, 0., 1. - red_blue, 1.])
+        state.avatars_colors.push([red_blue, 0., 1. - red_blue, 1.])
+        state.avatars_colors.push([red_blue, 0., 1. - red_blue, 1.])
+        state.avatars_vertices.push([
+          0, angle, 0, 0
+        ])
+        state.avatars_vertices.push([
+          -size, angle, 0, 1
+        ])
+        state.avatars_vertices.push([
+          size, angle, -size, 1
+        ])
+        state.avatars_vertices.push([
+          size, angle, size, 1
+        ])
+        state.avatars_positions.push([X, Y, Z, 0])
+        state.avatars_positions.push([X, Y, Z, 0])
+        state.avatars_positions.push([X, Y, Z, 0])
+        state.avatars_positions.push([X, Y, Z, 0])
+
+        state.avatars_indices.push(index_counter)
+        state.avatars_indices.push(index_counter + 1)
+        state.avatars_indices.push(index_counter + 2)
+        state.avatars_indices.push(index_counter)
+        state.avatars_indices.push(index_counter + 2)
+        state.avatars_indices.push(index_counter + 3)
+        state.avatars_indices.push(index_counter)
+        state.avatars_indices.push(index_counter + 3)
+        state.avatars_indices.push(index_counter + 1)
+        index_counter += 4;
+        loop_counter++;
+      }
+    }
+    function load_projectiles_attribles() {
+      state.projectiles_indices = [];
+      state.projectiles_vertices = [];
+      state.projectiles_colors = [];
+      state.projectiles_positions = [];
+
+      var index_counter = 0;
+      var loop_counter = 0;
+      for (const projectile of state.projectiles) {
+        var vel = glMatrix.vec3.normalize(glMatrix.vec3.create(), projectile.velocity)
+
+        var angle = Math.atan2(vel[2], vel[0]);
+
+        var X = -projectile.position[0] / state.grid_scalar / 2.;
+        var Y = 0.;
+        var Z = -projectile.position[2] / state.grid_scalar / 2.;
+
+        var size = state.default_radius / 1.5;
+
+        const red_green = 0.;//loop_counter % 2;
+
+        var speed = (1. + glMatrix.vec3.length(projectile.velocity) / (state.max_speed * state.projectiles_speed_scalar))
+        var omega = projectile.creator.name.hashCode();
+        var r = Math.cos(Math.PI * 0. / 3. + omega) * .5 + .5
+        var g = Math.cos(Math.PI * 2. / 3. + omega) * .5 + .5
+        var b = Math.cos(Math.PI * 4. / 3. + omega) * .5 + .5
+        state.projectiles_colors.push([r, g, b, 1.])
+        state.projectiles_colors.push([r, g, b, 1.])
+        state.projectiles_colors.push([r, g, b, 1.])
+        state.projectiles_colors.push([r, g, b, 1.])
+        state.projectiles_vertices.push([
+          0, angle, 0, 0
+        ])
+        state.projectiles_vertices.push([
+          -size * speed, angle, 0, 1
+        ])
+        state.projectiles_vertices.push([
+          size * speed, angle, -size, 1
+        ])
+        state.projectiles_vertices.push([
+          size * speed, angle, size, 1
+        ])
+        state.projectiles_positions.push([X, Y, Z, 0])
+        state.projectiles_positions.push([X, Y, Z, 0])
+        state.projectiles_positions.push([X, Y, Z, 0])
+        state.projectiles_positions.push([X, Y, Z, 0])
+
+        state.projectiles_indices.push(index_counter)
+        state.projectiles_indices.push(index_counter + 1)
+        state.projectiles_indices.push(index_counter + 2)
+        state.projectiles_indices.push(index_counter)
+        state.projectiles_indices.push(index_counter + 2)
+        state.projectiles_indices.push(index_counter + 3)
+        state.projectiles_indices.push(index_counter)
+        state.projectiles_indices.push(index_counter + 3)
+        state.projectiles_indices.push(index_counter + 1)
+        index_counter += 4;
+        loop_counter++;
+      }
+    }
+
+    function load_asteroids_attribles() {
+      state.asteroids_indices = [];
+      state.asteroids_vertices = [];
+      state.asteroids_colors = [];
+      state.asteroids_positions = [];
+
+      var index_counter = 0;
+      var loop_counter = 0;
+      for (const asteroid of [state.asteroids, state.powerups].flat()) {
+
+        var angle = state.current_time;
+
+        var X = -asteroid.position[0] / state.grid_scalar / 2.;
+        var Y = 0.;
+        var Z = -asteroid.position[2] / state.grid_scalar / 2.;
+
+        var size = asteroid.position[3] * state.asteroid_radius_scalar;
+
+        var r = Math.cos(Math.PI * 0. / 3. + asteroid.created) * .5 + .5
+        var g = Math.cos(Math.PI * 2. / 3. + asteroid.created) * .5 + .5
+        var b = Math.cos(Math.PI * 4. / 3. + asteroid.created) * .5 + .5
+        r = 42. / 256.
+        g = 42. / 256.
+        b = 165. / 256.
+
+        var edges = 12;
+        if (!(loop_counter < state.asteroids.length)) {
+          const swap = asteroid.is_health ? r : g;
+          r = asteroid.is_health ? b : 0;
+          g = asteroid.is_health ? 0 : b;
+          b = swap;
+          edges = asteroid.is_health ? 8 : 6;
+        }
+        state.asteroids_colors.push([r, g, b, 1.])
+        state.asteroids_vertices.push([
+          0, angle, 0, 0
+        ])
+        state.asteroids_positions.push([X, Y, Z, 0])
+        for (var i = 0; i < edges; i++) {
+          var a = angle + i * Math.PI * 2. / edges
+          var radius = Math.sin(Math.PI * edges) * .5 + 1.;
+          state.asteroids_colors.push([r, g, b, 1.])
+          state.asteroids_vertices.push([
+            size * radius * Math.cos(a), a, size * radius * Math.sin(a), 1
+          ])
+          state.asteroids_positions.push([X, Y, Z, 0])
+
+          state.asteroids_indices.push(index_counter)
+          state.asteroids_indices.push(index_counter + (i + 1) % edges)
+          state.asteroids_indices.push(index_counter + (i + 2) % edges)
+        }
+        index_counter += edges + 1;
+        loop_counter++;
+      }
+    }
+
+    function reload_stars_attributes() {
+      state.stars_mesh_indices = [];
+      state.stars_mesh_vertices = [];
+      var index_counter = 0
+
+      for (var i = 0; i < state.num_stars; i++) {
+        var X = (Math.random() * 2. - 1.) * state.grid_scalar * 4.
+        var Y = (-Math.random() - 1.) * state.grid_scalar * 2.
+        var Z = (Math.random() * 2. - 1.) * state.grid_scalar * 4.
+        state.stars_mesh_vertices.push([
+          X, Y, Z, 1
+        ])
+        state.stars_mesh_indices.push(index_counter)
+        index_counter += 1;
+      }
+    }
+
+    function reload_particles_attributes() {
+      state.particles_mesh_indices = [];
+      state.particles_mesh_vertices = [];
+      var index_counter = 0
+
+      var new_explosions = []
+      for (var e of state.explosions) {
+        if (state.current_time - e.created <= state.explosion_duration * state.temporal_scalar)
+          new_explosions.push(e)
+      }
+      state.explosions = new_explosions;
+
+      for (var e of state.explosions) {
+        for (var i = 0; i < state.particles_per_explosion; i++) {
+          var X = e.positions[i][0]
+          var Y = e.positions[i][1]
+          var Z = e.positions[i][2]
+
+          state.particles_mesh_vertices.push([
+            X, Y, Z, .5
+          ])
+          state.particles_mesh_indices.push(index_counter)
+          index_counter += 1;
+        }
+      }
+    }
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,18 @@
+{
+  "name": "orbit-lock",
+  "version": "1.0.0",
+  "description": "Orbit Lock client/server.",
+  "main": "index.js",
+  "homepage": "https://github.com/ScienceOrDie/ScienceOrDie.com.git",
+  "scripts": {
+    "configure": "node configure.js",
+    "start": "node index.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.17.1",
+    "ws": "^8.11.0"
+  }
+}
