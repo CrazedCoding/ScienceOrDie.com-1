@@ -1791,7 +1791,7 @@ void main(void) {
     }
 
     window.setInterval(()=>{
-      if (state.audio_ctx){
+      if (state.voice_enabled && state.audio_ctx){
         state.channel_members.forEach((user) => {
           if (user.audio_clips.length > 0) {
             const time = new Date().getTime() / 1E3
@@ -1942,6 +1942,7 @@ void main(void) {
     }
 
     var state = {
+      voice_enabled: false,
       average_amplitude: 0,
       user: null,
       planets: new Array(Math.floor(num_planets)).fill(0).map((_, i) => {
