@@ -2081,6 +2081,7 @@ void main(void) {
     }
 
     function init_audio() {
+      if(!state.voice_enabled) return;
       // Detect if the audio context is supported.
       window.AudioContext = (
         window.AudioContext ||
