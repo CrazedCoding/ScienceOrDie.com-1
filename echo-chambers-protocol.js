@@ -33,8 +33,7 @@ function help_message() {
 		"|--------------------| Four (4) 32-Bit Floats - Angular Velocity\n" +
 		"|----| One (1) 32-Bit Float - Uptime in miliseconds\n" +
 		"|----| 32-Bit (4-Byte) Unsigned Int - Audio Data Length (bytes) \n" +
-		"|----| 32-Bit (4-Byte) Float - Time Since Last Audio Data (seconds)\n" +
-		"|--------...---------| X 8-Bit (1-Byte) Unsigned Integers - Synthetic Audio Data\n" +
+		"|--------...---------| X 8-Bit (1-Byte) Unsigned Integers - MP3 Audio Data\n" +
 		"|--------...---------| Remaining Bytes - Base 64 Encoded JSON meta data string\n\n" +
 
 		"The metadata section is has the following JSON fields for each opcode:\n\n" +
@@ -101,14 +100,13 @@ exports.create = function () {
 			this.spacio_temporal = new Uint8Array(4*4*4).fill(0);
 
 			this.voice_audio = null
-			this.last_audio = 0
 			this.client = client;
 			this.assignRandomName();
 		}
 		send(opcode, metadata, from, signal) {
 			var json_string = JSON.stringify(metadata)
 			var audio = signal ? signal : (this.voice_audio ? this.voice_audio : [])
-			var size = 1 + 4 * 4 * 4 + 4 * 3 + audio.length + json_string.length;
+			var size = 1 + 4 * 4 * 4 + 4 * 2 + audio.length + json_string.length;
 			var message = new DataView(new Uint8Array(size).buffer)
 
 			var offset = 0;
@@ -120,8 +118,6 @@ exports.create = function () {
 			message.setFloat32(offset, new Date().getTime()-start_time)
 			offset += 4
 			message.setUint32(offset, audio.length)
-			offset += 4
-			message.setFloat32(offset, this.last_audio)
 			offset += 4
 			for (var i = 0; i < audio.length; i++) {
 				message.setUint8(offset, audio[i])
@@ -189,13 +185,11 @@ exports.create = function () {
 				}
 
 				const user_voice = this.voice_audio
-				const since_last = this.last_audio
 				const spacio_temporal = this.spacio_temporal
 				this.channel.users.forEach((user) => {
-					user.send(OP_SAY, payload, spacio_temporal, user_voice, since_last);
+					user.send(OP_SAY, payload, spacio_temporal, user_voice);
 				});
 				this.voice_audio = null
-				this.last_audio = 0
 			}
 		}
 		assignRandomName() {
@@ -263,8 +257,6 @@ exports.create = function () {
 				offset += 4
 				var length = view.getUint32(offset)
 				offset += 4
-				var since = view.getFloat32(offset)
-				offset += 4
 				var signal = new Uint8Array(length)
 				for (var i = 0; i < length; i++) signal[i] = view.getUint8(offset + i);
 				offset += length
@@ -274,12 +266,10 @@ exports.create = function () {
 				var message = {
 					opcode,
 					spacio_temporal,
-					since,
 					signal,
 					metadata,
 				}
 				client.user.spacio_temporal = spacio_temporal
-				client.user.last_audio = since
 				client.user.voice_audio = new Uint8Array(signal)
 				client.emit('command', message);
 			} catch (e) {

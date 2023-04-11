@@ -250,7 +250,7 @@ void main()
   vec2 uv = vPosition.xy;
   vec4 texColor = texture2D(projectiles_texture, vec2(uv.x, 1.-uv.y));
 
-  gl_FragColor = texColor-1./16.;
+  gl_FragColor = texColor-1./64.;
 }`,
           "vertex": `precision highp float;
 precision highp int;
@@ -407,7 +407,7 @@ void main()
     float depth = gravity_distance(xyz);
 
     float dist = length(xyz/grid_scalar);
-    depth = depth*(1.-supernova)+(cos(-time*PI+dist*dist*PI)*.5+.5)*supernova/(1.+dist*2.);
+    depth = depth*(1.-supernova)+(cos(-time*PI*2.+dist*dist*PI)*.5+.5)*supernova/(1.+dist*2.);
     gl_FragColor = vec4(floor(depth)/256., fract(depth), floor(depth*256.)/256., 1.);
 }`,
           "vertex": `
@@ -427,6 +427,12 @@ void main(void) {
         },
         {
           "dynamics": [
+            {
+              "value": () => {
+                return state.raymarch_steps + "";
+              },
+              "name": `raymarch_steps`
+            },
             {
               "value": () => {
                 return new Number(state.vertical_gravity).toFixed(3);
@@ -608,20 +614,6 @@ void set_planet_heights() {
     planetsB[3].y = -gravity_distance(vec3(planetsB[3].xz, 0.).xzy);
 }
 
-float planet_hit = 0.;
-float sphere_dist(in vec3 ro, in vec3 rd, vec4 sphere) {
-    vec3 oc = ro - sphere.xyz;
-    float b = dot( oc, rd );
-    float c = dot( oc, oc ) - sphere.w*grid_scalar*planet_radius_scalar;
-    float h = b*b - c;
-    if( h<0.0  || dot(oc, rd) > 0.) {
-       return 1.0E32;
-    }
-    planet_hit = 1.;
-    h = sqrt( h );
-    return -b - h;
-}
-
 vec3 gravity_normal(vec3 p) { 
     vec2 e = vec2(grid_scalar/32., 0);
     float d1 = gravity_distance(p + e.xyy), d2 = gravity_distance(p - e.xyy);
@@ -630,85 +622,97 @@ vec3 gravity_normal(vec3 p) {
     float d = gravity_distance(p);
     return normalize(vec3(d1 - d2, d3 - d4, d5 - d6));
 }
-//main march
-vec3 march_gravity(vec3 ro, vec3 rd) {
-    float d = 0.0; //distance marched
-    vec3 rp = ro; //ray position
-    for (int i = 0; i < 10; i++) {
-        float ds = gravity_distance(rp);
-       //ds /= 8.;
-       rd = normalize(rd);
-        d += ds;
-        rp = ro + rd * d;
-    }
-        
-    return rp;
-}
-
 vec4 nearest_planet = vec4(grid_scalar);
 float mind = 1E32;
 float hit_planet = -1.;
-float trace_planets(vec3 ro, vec3 rd) {
+float planets_dis(vec3 ro) {
     
     float mindis = 1E32;
-    float dis = sphere_dist(ro, rd, planetsA[0]);
+    float dis = length(planetsA[0].xyz-ro)-planetsA[0].w*grid_scalar/16.;
     if(mindis > dis){
         mindis = dis;
-        nearest_planet = vec4(planetsA[0].xyz, 1.);
+        nearest_planet = vec4(planetsA[0].xyzw);
         hit_planet = 0.;
     }
 
-    dis = sphere_dist(ro, rd, planetsA[1]);
+    dis = length(planetsA[1].xyz-ro)-planetsA[1].w*grid_scalar/16.;
     if(mindis > dis){
         mindis = dis;
-        nearest_planet = vec4(planetsA[1].xyz, 2.);
+        nearest_planet = vec4(planetsA[1].xyzw);
         hit_planet = 1.;
     }
 
-    dis = sphere_dist(ro, rd, planetsA[2]);
+    dis = length(planetsA[2].xyz-ro)-planetsA[2].w*grid_scalar/16.;
     if(mindis > dis){
         mindis = dis;
-        nearest_planet = vec4(planetsA[2].xyz, 3.);
+        nearest_planet = vec4(planetsA[2].xyzw);
         hit_planet = 2.;
     }
 
-    dis = sphere_dist(ro, rd, planetsA[3]);
+    dis = length(planetsA[3].xyz-ro)-planetsA[3].w*grid_scalar/16.;
     if(mindis > dis){
         mindis = dis;
-        nearest_planet = vec4(planetsA[3].xyz, 4.);
+        nearest_planet = vec4(planetsA[3].xyzw);
         hit_planet = 3.;
     }
 
-    dis = sphere_dist(ro, rd, planetsB[0]);
+    dis = length(planetsB[0].xyz-ro)-planetsB[0].w*grid_scalar/16.;
     if(mindis > dis){
         mindis = dis;
-        nearest_planet = vec4(planetsB[0].xyz, 5.);
+        nearest_planet = vec4(planetsB[0].xyzw);
         hit_planet = 4.;
     }
 
-    dis = sphere_dist(ro, rd, planetsB[1]);
+    dis = length(planetsB[1].xyz-ro)-planetsB[1].w*grid_scalar/16.;
     if(mindis > dis){
         mindis = dis;
-        nearest_planet = vec4(planetsB[1].xyz, 6.);
+        nearest_planet = vec4(planetsB[1].xyzw);
         hit_planet = 5.;
     }
 
-    dis = sphere_dist(ro, rd, planetsB[2]);
+    dis = length(planetsB[2].xyz-ro)-planetsB[2].w*grid_scalar/16.;
     if(mindis > dis){
         mindis = dis;
-        nearest_planet = vec4(planetsB[2].xyz, 7.);
+        nearest_planet = vec4(planetsB[2].xyzw);
         hit_planet = 6.;
     }
 
-    dis = sphere_dist(ro, rd, planetsB[3]);
+    dis = length(planetsB[3].xyz-ro)-planetsB[3].w*grid_scalar/16.;
     if(mindis > dis){
         mindis = dis;
-        nearest_planet = vec4(planetsB[3].xyz, 8.);
+        nearest_planet = vec4(planetsB[3].xyzw);
         hit_planet = 7.;
     }
 
     return mindis;
 }
+//main march
+vec4 march_gravity(vec3 ro, vec3 rd) {
+    float d = 0.0; //distance marched
+    vec3 rp = ro; //ray position
+    for (int i = 0; i < raymarch_steps; i++) {
+        float ds = gravity_distance(rp);
+        d += ds;
+        rp = ro + rd * d;
+    }
+        
+    return vec4(rp, d);
+}
+
+float min_planet_dis = 1E32;
+vec4 march_planets(vec3 ro, vec3 rd) {
+    float d = 0.0; //distance marched
+    vec3 rp = ro; //ray position
+    for (int i = 0; i < raymarch_steps; i++) {
+        float ds = planets_dis(rp);
+        if(ds < min_planet_dis) min_planet_dis = ds;
+        d += ds;
+        rp = ro + rd * d;
+    }
+        
+    return vec4(rp, d);
+}
+
 
 void main()
 {
@@ -719,21 +723,21 @@ void main()
     vec4 look = projection_inverse*vec4(vec3(uv, 0.), 1.);
     vec3 rayDir= (vec4(normalize(look.xyz), 0.)*view).xyz;
 
-    vec2 minimap_size = 1./3.*vec2(min(height/width, 1.), min(width/height, 1.));
-    float minimap = (1.-smoothstep(minimap_size.x*.975, minimap_size.x, uv.x*.5+.5))*(1.-smoothstep(minimap_size.y*.975, minimap_size.y, -uv.y*.5+.5));
-    float minimap_edge = smoothstep(0., .1, saw(minimap));
+    // vec2 minimap_size = 1./3.*vec2(min(height/width, 1.), min(width/height, 1.));
+    // float minimap = (1.-smoothstep(minimap_size.x*.975, minimap_size.x, uv.x*.5+.5))*(1.-smoothstep(minimap_size.y*.975, minimap_size.y, -uv.y*.5+.5));
+    // float minimap_edge = smoothstep(0., .1, saw(minimap));
 
-    vec2 minimap_uv = ((uv*.5*vec2(1., -1.)+.5)/minimap_size*2.-1.);
-    minimap_uv = rotatePoint(vec3(minimap_uv*2.*grid_scalar, 0.).xzy, vec3(0., 1., 0.), atan(camera_position.x-player_position.x, camera_position.z-player_position.z)).xz+player_position.xz;
-    minimap_uv = (mod(minimap_uv/grid_scalar*.25+.5, vec2(1.))*2.-1.);
-    minimap_uv *= grid_scalar*2.;
+    // vec2 minimap_uv = ((uv*.5*vec2(1., -1.)+.5)/minimap_size*2.-1.);
+    // minimap_uv = rotatePoint(vec3(minimap_uv*2.*grid_scalar, 0.).xzy, vec3(0., 1., 0.), atan(camera_position.x-player_position.x, camera_position.z-player_position.z)).xz+player_position.xz;
+    // minimap_uv = (mod(minimap_uv/grid_scalar*.25+.5, vec2(1.))*2.-1.);
+    // minimap_uv *= grid_scalar*2.;
 
-    vec3 ray_pos = camera_position*(1.-minimap)+minimap*(vec3(minimap_uv.x, minimap_uv.y, grid_scalar).xzy);
-    rayDir = rayDir*(1.-minimap)+minimap*vec3(0., -1., 0.);
+    vec3 ray_pos = camera_position;//*(1.-minimap)+minimap*(vec3(minimap_uv.x, minimap_uv.y, grid_scalar).xzy);
+    // rayDir = rayDir*(1.-minimap)+minimap*vec3(0., -1., 0.);
     
-    float planet_dis = trace_planets(ray_pos, rayDir);
+    float planet_dis = march_planets(ray_pos, rayDir).w;
     vec3 planet_pos = planet_dis*rayDir+ray_pos;
-    vec3 gravity_pos = march_gravity(ray_pos, rayDir);
+    vec3 gravity_pos = march_gravity(ray_pos, rayDir).xyz;
 
     vec3 planet_normal = normalize(planet_pos-nearest_planet.xyz);
 
@@ -742,14 +746,11 @@ void main()
     //gravity_pos.xz = rotatePoint(gravity_pos, vec3(0., 1., 0.), -time/grid_scalar*PI).xz;
 
     float vertical_depth = gravity_distance(vec3(gravity_pos.x, 0., gravity_pos.z))/vertical_gravity;
-    vertical_depth = pow(vertical_depth, .5);
+    vertical_depth = pow(vertical_depth, .125);
 
     vec2 plane = ((saw(gravity_pos.xz))*2.-1.);
 
-    //plane /= mind*2.5;
-    //float grid_x = 1.-smoothstep(0., .25, abs(plane.x));
-    //float grid_z = 1.-smoothstep(0., .25, abs(plane.y));
-    //float grid = max(grid_x, grid_z);
+
 texCoords.y *= -1.;
     vec2 grid_xy = (texCoords/grid_scalar*.25+.5);
   grid_xy.x = 1.-grid_xy.x;
@@ -758,40 +759,43 @@ texCoords.y *= -1.;
     float detail = 1.;
    
 
-    vec3 rotated =  rotatePoint(planet_normal, normalize(flux(nearest_planet.w*12.21+21.12  )), time*PI*sin(nearest_planet.w*321.123));
+    vec3 rotated =  rotatePoint(planet_normal, normalize(flux(hit_planet*12.21+21.12  )), time*PI*sin(hit_planet*321.123));
     float surface_water = sin(time*sun+rotated.x*detail*3.+1.)*sin(time*sun+rotated.y*detail*GR*2.+2.)*sin(rotated.z*detail*E+3.)*.5+.5;
     float surface_couds = clamp(sin(-time*sun*PI+rotated.x*detail*3.+1.)*sin(-time*sun*PI+rotated.y*detail*GR*2.+2.)*sin(rotated.z*detail*E+3.)+pow(abs(rotated.y), 16.), 0., 1.);
-    vec3 planet_color = flux(rotated.x+rotated.z+nearest_planet.w*123.321)*surface_water*(1.-surface_couds)+surface_couds;
+    vec3 planet_color = flux(rotated.x+rotated.z+hit_planet*123.321)*surface_water*(1.-surface_couds)+surface_couds;
     planet_color = planet_color*(1.-sun)+sun*vec3(surface_couds+surface_water/2.+.5, surface_water, saw(surface_water+surface_couds+time)*.125);
     float isSun = (1.-(dot(normalize(vec3(planet_pos.x, 0., planet_pos.z)), planet_normal)*.5+.5));
     planet_color = (sun+(1.-dot(planet_normal, rayDir)*.5+.5)*isSun)*planet_color;
-    planet_color = clamp(planet_color, vec3(0.), vec3(planet_hit));
+    // planet_color = clamp(planet_color, vec3(0.), vec3(hit_planet+1.));
     vec4 texColor = texture2D(projectiles_texture, vec2(grid_xy.x, 1.-grid_xy.y));
-    float fractal = (1.+gravity_dis/grid_scalar)*(1.+minimap)*GR;
+    float fractal = (1.+gravity_dis/grid_scalar);
     float map_edge = smoothstep(0., 4./grid_scalar*fractal, 1.-max((saw(grid_xy.x*2.-1.)), (saw(grid_xy.y*2.-1.))));//min(smoothstep(0., 1./grid_scalar*4.*fractal, 1.-abs(gravity_pos.x/grid_scalar/2.)),smoothstep(0., 1./grid_scalar*4.*fractal, 1.-abs(gravity_pos.z/grid_scalar/2.)));
 
-    gl_FragColor = vec4(planet_color, planet_hit);
+    if(min_planet_dis < 1./grid_scalar) { 
+    gl_FragColor = vec4(planet_color, 1.);//*clamp(hit_planet+1., 0., 1.);
+  }
     vec2 edge_xy = grid_xy*2.-1.;//rotatePoint(vec3(grid_xy*2.-1., 0.).xzy, vec3(0., 1., 0.), time/PI).xz;
 
-    float edge_x = 1.-smoothstep(0., .125*fractal, saw(edge_xy.x*grid_scalar/4.));
-    float edge_z = 1.-smoothstep(0., .125*fractal, saw(edge_xy.y*grid_scalar/4.));
+    float edge_x = 1.-smoothstep(0., .25*fractal, saw(edge_xy.x*grid_scalar/8.));
+    float edge_z = 1.-smoothstep(0., .25*fractal, saw(edge_xy.y*grid_scalar/8.));
  
 float edge = max(edge_x, edge_z)*map_edge;
     grid_xy.xy = 1.-grid_xy.xy;
     grid_xy.xy-= player_position.xz/grid_scalar/2.*.5+.5;
-    float fog = (1.-smoothstep(0.125, .25, length(grid_xy.xy)));
+    float fog = (1.-smoothstep(0.25, .5, length(grid_xy.xy)));
+    float fog2 = (1.-smoothstep(0.5, .75, length(grid_xy.xy)));
 
     float light = ((.75+.25*dot(-normalize(gravity_pos), gravity_normal(gravity_pos))));
 
 
     vec3 sunDir = normalize(ray_pos+vec3(0., gravity_distance(vec3(0.)),0.));
     if(gravity_dis < planet_dis) {
-        gl_FragColor += texColor*map_edge+vec4(saw(texColor*2.).rgb, 1.)*(1.-map_edge);
+        gl_FragColor += texColor*fog2;
     vec3 grid_color = flux((supernova+vertical_depth)+PI);
-   gl_FragColor += vec4(0., 1., 0., 1.)*(saw(map_edge*2.))*fog +(vec4(grid_color, 1.)*edge*fog*map_edge*light);
+   gl_FragColor += vec4(0., 1., 0., 1.)*(saw(map_edge*2.))*fog +(vec4(grid_color, 1.)*edge*fog*map_edge)*vertical_depth;
     }
 
-    gl_FragColor+= minimap_edge+vec4(0.,0.,0.,minimap);
+    // gl_FragColor+= minimap_edge+vec4(0.,0.,0.,minimap);
 }`,
           "vertex": `precision highp float;
 precision highp int;
@@ -1369,8 +1373,6 @@ void main(void) {
     #define flux(x) (vec3(cos(x),cos(4.0*PI/3.0+x),cos(2.0*PI/3.0+x))*.5+.5)
     #define rotatePoint(p,n,theta) (p*cos(theta)+cross(n,p)*sin(theta)+n*dot(p,n) *(1.0-cos(theta)))
     `
-    const sample_size = 4096*2
-    const amplitude_threshold = .0125
 
     try {
       state.websocket.close()
@@ -1387,7 +1389,7 @@ void main(void) {
     const max_projectiles = 128;
     const max_asteroids = 64;
     const init_time = new Date().getTime();
-    const init_scalar = 512;
+    const init_scalar = 1024;
     const default_planet_names =
       [
         "The sun",
@@ -1617,7 +1619,7 @@ void main(void) {
         state.delta_fire[1] *= fire_len;
       }
 
-      length += (state.grid_scalar / 8. - length) * state.delta_time * state.camera_speed_scalar
+      length += (state.grid_scalar / 4. - length) * state.delta_time * state.camera_speed_scalar
       glMatrix.vec3.scaleAndAdd(state.camera_position, state.user.position, state.camera_position, length)
     }
 
@@ -1699,7 +1701,7 @@ void main(void) {
       state.nametag_words = state.channel_members.filter(u => { return u.health > 0 }).map(user => {
         return new Words(user.name, user.name, user.position, state.current_time)
       })
-      state.supernova = Math.max((Math.cos(-state.universal_time * state.temporal_scalar * 2. * Math.PI / 30.) * .5 + .5) * 30. - 29., 0.)
+      state.supernova = Math.max((Math.cos(-state.universal_time * state.temporal_scalar * 2. * Math.PI / 30.) * .5 + .5) * 30. - 29., 0.05)
 
       const flip = false;
       var pgl = pipeline.getContext("projectiles-context").gl;
@@ -1790,76 +1792,108 @@ void main(void) {
       state.frame_count++;
     }
 
-    window.setInterval(()=>{
-      if (state.voice_enabled && state.audio_ctx){
+    
+    const audio_start_time = new Date().getTime();
+    const audio_sample_size = 1024
+    let audio_last_time = audio_start_time;
+    let audio_current_time = 0;
+    let audio_samples = []
+    let amplitude_duration = 0;
+    let amplitude_threshold = .00125;
+    let duration_threshold = .25;
+    let sampling_started = false;
+    window.setInterval(() => {
+      const now = new Date().getTime();
+      audio_current_time = (now - audio_start_time) / 1E3;
+      let audio_delta_time = (now - audio_last_time) / 1E3;
+      audio_last_time = now;
+
+      if (state.audio_ctx) {
         state.channel_members.forEach((user) => {
           if (user.audio_clips.length > 0) {
-            const time = new Date().getTime() / 1E3
-            const since_last = (time - user.last_speak)
-            if (since_last > user.audio_clips[0][0]) {
-              [_, audio_signal] = user.audio_clips.shift()
-              const audio = new Audio()
-              audio.src = audio_signal
-              audio.play()
-              user.last_speak = time
+            const audio_signal = user.audio_clips.shift()
+            var audio = new Audio()
+            audio.src = audio_signal
+            audio.play()
+          }
+        })
+      }
+
+      function transmit() {
+        channels = 1; //1 for mono or 2 for stereo
+        kbps = 128; //encode 128kbps mp3
+        mp3encoder = new lamejs.Mp3Encoder(channels, state.audio_ctx.sampleRate, kbps);
+        const mp3Data = [];
+
+        sampleBlockSize = 576 * 4; //can be anything but make it a multiple of 576 to make encoders life easier
+
+        audio_samples.forEach((samples) => {
+          for (var i = 0; i < samples.length; i += sampleBlockSize) {
+            sampleChunk = samples.subarray(i, i + sampleBlockSize);
+            var mp3buf = mp3encoder.encodeBuffer(sampleChunk);
+            if (mp3buf.length > 0) {
+              mp3Data.push(mp3buf);
             }
           }
         })
 
-        if(state.microphone && state.analyser) {
-          var data_array = new Float32Array(sample_size);
-          state.output_signal = data_array
-          state.analyser.getFloatTimeDomainData(data_array);
+        var mp3buf = mp3encoder.flush();   //finish writing mp3
+        if (mp3buf.length > 0) {
+          mp3Data.push(new Int8Array(mp3buf));
+        }
 
-          var average_amplitude = 0
+        var blob = new Blob(mp3Data, { type: 'audio/mp3' });
+        reader = new FileReader();
+        reader.onload = function (e) {
+          const src = e.target.result;
+          if (state.current_channel) send_command(OP_SAY, { message: "/chatter" }, null, str2bin(src))
+        };
+        reader.readAsDataURL(blob);
+      }
 
-          data_array = new Int16Array(data_array).map((_, i) => {
-            average_amplitude += Math.abs(data_array[i])
-            return Math.floor(data_array[i] * 256 * 128)
-          })
+      if (state.microphone && state.analyser) {
+        var data_array = new Float32Array(audio_sample_size);
+        state.output_signal = data_array
+        state.analyser.getFloatTimeDomainData(data_array);
 
-          average_amplitude /= sample_size
-          // console.log(average_amplitude)
-          state.average_amplitude = Math.max(average_amplitude, state.average_amplitude - 1. / 60)
+        var average_amplitude = 0
+
+        data_array = new Int16Array(data_array).map((_, i) => {
+          average_amplitude += Math.abs(data_array[i])
+          return Math.floor(data_array[i] * 256 * 128)
+        })
+
+        average_amplitude /= audio_sample_size
+        // console.log(average_amplitude)
+        state.average_amplitude = Math.max(average_amplitude, state.average_amplitude - audio_delta_time)
+        if (!sampling_started) {
+          if (average_amplitude < amplitude_threshold) {
+            audio_samples = []
+            amplitude_duration = 0;
+          } else {
+            audio_samples.push(data_array)
+            amplitude_duration += audio_delta_time
+            if (amplitude_duration > duration_threshold) {
+              amplitude_duration = 0;
+              sampling_started = true;
+            }
+          }
+        } else if (sampling_started) {
+          audio_samples.push(data_array)
           if (average_amplitude > amplitude_threshold) {
-
-
-            channels = 1; //1 for mono or 2 for stereo
-            kbps = 128; //encode 128kbps mp3
-            mp3encoder = new lamejs.Mp3Encoder(channels, state.audio_ctx.sampleRate, kbps);
-            var mp3Data = [];
-
-            samples = data_array; //one second of silence (get your data from the source you have)
-            sampleBlockSize = 576*4; //can be anything but make it a multiple of 576 to make encoders life easier
-
-            var mp3Data = [];
-            for (var i = 0; i < samples.length; i += sampleBlockSize) {
-              sampleChunk = samples.subarray(i, i + sampleBlockSize);
-              var mp3buf = mp3encoder.encodeBuffer(sampleChunk);
-              if (mp3buf.length > 0) {
-                mp3Data.push(mp3buf);
-              }
+            amplitude_duration = 0
+          } else {
+            amplitude_duration += audio_delta_time
+            if (amplitude_duration > duration_threshold) {
+              amplitude_duration = 0;
+              sampling_started = false;
+              transmit();
+              audio_samples = []
             }
-            var mp3buf = mp3encoder.flush();   //finish writing mp3
-
-            if (mp3buf.length > 0) {
-              mp3Data.push(new Int8Array(mp3buf));
-            }
-
-
-            var blob = new Blob(mp3Data, { type: 'audio/mp3' });
-            reader = new FileReader();
-            reader.onload = function (e) {
-              const src = e.target.result;
-              state.audio_signal = str2bin(src)
-              if (state.current_channel) send_command(OP_SAY, { message: "/chatter" })
-              state.last_transmit = new Date().getTime()-data_array.length/state.audio_ctx.sampleRate;
-            };
-            reader.readAsDataURL(blob);
           }
         }
       }
-    }, 100.)
+    }, 1000./60.)
 
     const OP_ERROR = 1;
     const OP_NAME = 2;
@@ -1914,7 +1948,6 @@ void main(void) {
 
     function User(name) {
       this.audio_clips = []
-      this.last_speak = new Date().getTime() / 1E3
       this.name = name ? name : ""
       this.position = new Float32Array(4).fill(0)
       this.position[0] = state.grid_scalar * (Math.random() * .01 + .99)
@@ -1942,7 +1975,8 @@ void main(void) {
     }
 
     var state = {
-      voice_enabled: false,
+      raymarch_steps: 12,
+      voice_enabled: true,
       average_amplitude: 0,
       user: null,
       planets: new Array(Math.floor(num_planets)).fill(0).map((_, i) => {
@@ -1958,21 +1992,21 @@ void main(void) {
       last_physics_send: init_time,
       last_projectile_send: init_time,
       last_asteroid_create: init_time,
-      physics_wait: 1. / 5.,
+      physics_wait: 1. / 4.,
       max_time_step: .5,
       projectiles: [],
       asteroids: [],
       grid_scalar: init_scalar,
       sphere_detail: 8,
       vertical_gravity: init_scalar / 1.75,
-      horizontal_gravity_scalar: 1.25,
+      horizontal_gravity_scalar: 1.,
       default_radius: 6. / init_scalar,
-      max_speed: init_scalar * 1.75,
-      projectiles_speed_scalar: 2,
+      max_speed: init_scalar * 2.25,
+      projectiles_speed_scalar: 1.25,
       asteroids_speed_scalar: 1.5,
-      temporal_scalar: 1. / 3.,
-      gravitation_scalar: 5.2,
-      camera_speed_scalar: 3.,
+      temporal_scalar: 1. / 5.,
+      gravitation_scalar: 10,
+      camera_speed_scalar: 8.,
       mouse_position: [0, 0],
       controls_radius: .5,
       supernova: 0,
@@ -2081,7 +2115,6 @@ void main(void) {
     }
 
     function init_audio() {
-      if(!state.voice_enabled) return;
       // Detect if the audio context is supported.
       window.AudioContext = (
         window.AudioContext ||
@@ -2089,86 +2122,97 @@ void main(void) {
         null
       );
 
-      if (!AudioContext || state.audio_ctx) {
-        return;
+      if (AudioContext && !state.audio_ctx) {
+        // Create a new audio context.
+        state.audio_ctx = new AudioContext();
       }
 
-      // Create a new audio context.
-      state.audio_ctx = new AudioContext();
-
-      function microphone_obtained(stream) {
-        state.microphone = state.audio_ctx.createMediaStreamSource(stream);
-        state.analyser = state.audio_ctx.createAnalyser();
-
-        state.analyser.fftSize = sample_size;
-
-        state.analyser.smoothingTimeConstant = 0.0;
-
-        state.microphone.connect(state.analyser);
+      if (!AudioContext || !state.audio_ctx) {
+        return
       }
 
-      if (navigator.mediaDevices === undefined) {
-        navigator.mediaDevices = {};
+      if (!state.main_volume) {
+        // Create a AudioGainNode to control the main volume.
+        state.main_volume = state.audio_ctx.createGain();
+        // Connect the main volume node to the context destination.
+        state.main_volume.connect(state.audio_ctx.destination);
       }
 
-      // Some browsers partially implement mediaDevices. We can't just assign an object
-      // with getUserMedia as it would overwrite existing properties.
-      // Here, we will just add the getUserMedia property if it's missing.
-      if (navigator.mediaDevices.getUserMedia === undefined) {
-        navigator.mediaDevices.getUserMedia = function (constraints) {
+      if (!state.pew_sounds) {
 
-          // First get ahold of the legacy getUserMedia, if present
-          var getUserMedia = navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+        state.pew_sounds = [];
 
-          // Some browsers just don't implement it - return a rejected promise with an error
-          // to keep a consistent interface
-          if (!getUserMedia) {
-            return Promise.reject(new Error('getUserMedia is not implemented in this browser'));
-          }
+        const pew_sound_names = new Array(Math.floor(num_pew_sounds)).fill(0).map((_, i) => {
+          return "sounds/pew-" + (i + 1) + ".mp3"
+        });
 
-          // Otherwise, wrap the call to the old navigator.getUserMedia with a Promise
-          return new Promise(function (resolve, reject) {
-            getUserMedia.call(navigator, constraints, resolve, reject);
-          });
+        for (var i = 0; i < num_pew_sounds; i++) {
+          const sound_file_name = pew_sound_names[i];
+          const sound = {};
+          state.pew_sounds[i] = sound;
+          load_sound(sound_file_name, sound)
+        }
+      }
+      if (!state.boom_sounds) {
+
+        state.boom_sounds = [];
+        const boom_sound_names = new Array(Math.floor(num_boom_sounds)).fill(0).map((_, i) => {
+          return "sounds/boom-" + (i + 1) + ".mp3"
+        });
+
+        for (var i = 0; i < num_boom_sounds; i++) {
+          const sound_file_name = boom_sound_names[i];
+          const sound = {};
+          state.boom_sounds[i] = sound;
+          load_sound(sound_file_name, sound)
         }
       }
 
-      navigator.mediaDevices.getUserMedia({ audio: true, video: false })
-        .then(function (stream) {
-          microphone_obtained(stream)
-        })
-        .catch(function (err) {
-          console.log(err.name + ": " + err.message);
-        });
+      if (state.voice_enabled && !state.microphone) {
+        function microphone_obtained(stream) {
+          state.microphone = state.audio_ctx.createMediaStreamSource(stream);
+          state.analyser = state.audio_ctx.createAnalyser();
 
-      // Create a AudioGainNode to control the main volume.
-      state.main_volume = state.audio_ctx.createGain();
-      // Connect the main volume node to the context destination.
-      state.main_volume.connect(state.audio_ctx.destination);
+          state.analyser.fftSize = audio_sample_size;
 
-      const pew_sound_names = new Array(Math.floor(num_pew_sounds)).fill(0).map((_, i) => {
-        return "sounds/pew-" + (i + 1) + ".mp3"
-      });
+          state.analyser.smoothingTimeConstant = 0.0;
 
-      state.pew_sounds = [];
+          state.microphone.connect(state.analyser);
+        }
 
-      for (var i = 0; i < num_pew_sounds; i++) {
-        const sound_file_name = pew_sound_names[i];
-        const sound = {};
-        state.pew_sounds[i] = sound;
-        load_sound(sound_file_name, sound)
-      }
-      const boom_sound_names = new Array(Math.floor(num_boom_sounds)).fill(0).map((_, i) => {
-        return "sounds/boom-" + (i + 1) + ".mp3"
-      });
+        if (navigator.mediaDevices === undefined) {
+          navigator.mediaDevices = {};
+        }
 
-      state.boom_sounds = [];
+        // Some browsers partially implement mediaDevices. We can't just assign an object
+        // with getUserMedia as it would overwrite existing properties.
+        // Here, we will just add the getUserMedia property if it's missing.
+        if (navigator.mediaDevices.getUserMedia === undefined) {
+          navigator.mediaDevices.getUserMedia = function (constraints) {
 
-      for (var i = 0; i < num_boom_sounds; i++) {
-        const sound_file_name = boom_sound_names[i];
-        const sound = {};
-        state.boom_sounds[i] = sound;
-        load_sound(sound_file_name, sound)
+            // First get ahold of the legacy getUserMedia, if present
+            var getUserMedia = navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+
+            // Some browsers just don't implement it - return a rejected promise with an error
+            // to keep a consistent interface
+            if (!getUserMedia) {
+              return Promise.reject(new Error('getUserMedia is not implemented in this browser'));
+            }
+
+            // Otherwise, wrap the call to the old navigator.getUserMedia with a Promise
+            return new Promise(function (resolve, reject) {
+              getUserMedia.call(navigator, constraints, resolve, reject);
+            });
+          }
+        }
+
+        navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+          .then(function (stream) {
+            microphone_obtained(stream)
+          })
+          .catch(function (err) {
+            console.log(err.name + ": " + err.message);
+          });
       }
     }
 
@@ -2194,10 +2238,10 @@ void main(void) {
       state.planets.forEach((p, i) => {
         var iteration = (i) * Math.PI * 2. / Math.max(num_planets - 1, 1) - state.universal_time / Math.PI * state.temporal_scalar
         var growth = Math.max(Math.min(1., num_planets - i), 0.);
-        p.position[0] = state.grid_scalar * Math.min(i, 1.) * Math.cos(iteration) * 1.1235 * growth
-        p.position[2] = state.grid_scalar * Math.min(i, 1.) * Math.sin(iteration) * 1.1235 * growth
+        p.position[0] = state.grid_scalar * Math.min(i, 1.) * Math.cos(iteration) * 1.235 * growth
+        p.position[2] = state.grid_scalar * Math.min(i, 1.) * Math.sin(iteration) * 1.235 * growth
         //p.position[1] = -gravity(p.position);
-        p.position[3] = (.75 - Math.min(i, 1.) * .125) * growth;
+        p.position[3] = (1. - Math.min(i, 1.) * .25) * growth;
       })
     }
 
@@ -2224,7 +2268,7 @@ void main(void) {
     }
 
     function play_pew(pos) {
-      if (state.audio_ctx) {
+      if (state.audio_ctx && state.sound_effects) {
         pos = glMatrix.mat4.mul(glMatrix.vec4.create(), state.view_matrix, [pos[0], pos[1], pos[2], 1.]);
         const sound = state.pew_sounds[Math.floor(Math.random() * num_pew_sounds)]
         sound.source = state.audio_ctx.createBufferSource();
@@ -2245,7 +2289,7 @@ void main(void) {
     }
 
     function play_boom(pos, level = 0) {
-      if (state.audio_ctx) {
+      if (state.audio_ctx && state.sound_effects) {
         pos = glMatrix.mat4.mul(glMatrix.vec4.create(), state.view_matrix, [pos[0], pos[1], pos[2], 1.]);
         const sound = state.boom_sounds[level]
         sound.source = state.audio_ctx.createBufferSource();
@@ -2482,14 +2526,11 @@ void main(void) {
         offset += 4
         var length = view.getUint32(offset)
         offset += 4;
-        var since_last = view.getFloat32(offset)
-        offset += 4;
         var audio_signal = ab2str(view.buffer.slice(offset, offset + length))
         var metadata = JSON.parse(ab2str(view.buffer.slice(offset + length)))
 
         var message = {
           opcode,
-          since_last,
           audio_signal,
           position,
           velocity,
@@ -2579,7 +2620,7 @@ void main(void) {
             if (data.message == "/chatter") {
               if (state.audio_ctx && message.audio_signal && data.name != state.user.name) {
                 user = state.channel_members.filter((u) => u.name == data.name)[0]
-                user.audio_clips.push([message.since_last, message.audio_signal])
+                user.audio_clips.push(message.audio_signal)
               }
             } else if (data.message == "/asteroid") {
               user = state.channel_members.filter((u) => u.name == data.name)[0]
@@ -2885,17 +2926,15 @@ void main(void) {
       reload_stars_attributes();
       pipeline.renderLoop()
     }
-    function send_command(opcode, metadata, physics_data) {
+    function send_command(opcode, metadata, physics_data, audio_signal = new Uint8Array(0)) {
       var time = new Date().getTime() / 1E3
-      var since_last = state.last_transmit ? time - state.last_transmit : 0;
       var spacio_temporal = physics_data ? physics_data : [state.user.position, state.user.orientation, state.user.velocity, state.user.angular_velocity];
       spacio_temporal[1][3] = state.current_time;
       spacio_temporal = spacio_temporal.map(v => [v[0], v[1], v[2], v[3]]).flat()
-      var audio_signal = state.audio_signal ? state.audio_signal : new Uint8Array(0);
-      var signal_length = state.audio_signal ? audio_signal.length : 0
+      var signal_length = audio_signal.length
       var json_string = JSON.stringify(metadata)
 
-      var message = new DataView(new Uint8Array(1 + 4 * 4 * 4 + 3 * 4 + signal_length + json_string.length).buffer)
+      var message = new DataView(new Uint8Array(1 + 4 * 4 * 4 + 2 * 4 + signal_length + json_string.length).buffer)
 
       var offset = 0;
 
@@ -2909,8 +2948,6 @@ void main(void) {
       message.setFloat32(offset, 0)
       offset += 4;
       message.setUint32(offset, signal_length)
-      offset += 4;
-      message.setFloat32(offset, since_last)
       offset += 4;
 
       for (var i = 0; i < signal_length; i++) {
@@ -3079,12 +3116,14 @@ void main(void) {
 
         var size = state.default_radius;
 
-        const red_blue = loop_counter % 2;
-
-        state.avatars_colors.push([red_blue, 0., 1. - red_blue, 1.])
-        state.avatars_colors.push([red_blue, 0., 1. - red_blue, 1.])
-        state.avatars_colors.push([red_blue, 0., 1. - red_blue, 1.])
-        state.avatars_colors.push([red_blue, 0., 1. - red_blue, 1.])
+        var omega = user.name.hashCode() + Math.PI * 2. / 3.;
+        var r = Math.cos(Math.PI * 0. / 3. + omega) * .5 + .5
+        var g = Math.cos(Math.PI * 2. / 3. + omega) * .5 + .5
+        var b = Math.cos(Math.PI * 4. / 3. + omega) * .5 + .5
+        state.avatars_colors.push([r, g, b, 1.])
+        state.avatars_colors.push([r, g, b, 1.])
+        state.avatars_colors.push([r, g, b, 1.])
+        state.avatars_colors.push([r, g, b, 1.])
         state.avatars_vertices.push([
           0, angle, 0, 0
         ])
