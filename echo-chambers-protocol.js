@@ -1,7 +1,26 @@
 
 const WebSocket = require('ws')
+const fs = require('fs');
 const max_channel_size = 8;
 const start_date = new Date()
+
+function str2ab(str) {
+    var buf = new ArrayBuffer(str.length * 2); // 2 bytes for each char
+    var bufView = new Uint16Array(buf);
+    for (var i = 0, strLen = str.length; i < strLen; i++) {
+        bufView[i] = str.charCodeAt(i);
+    }
+    return buf;
+}
+
+function ab2str( buffer, callback, encoding='UTF-8' ) {
+    if(!callback) return String.fromCharCode.apply(null, new Uint8Array(buffer));
+    var blob = new Blob([buffer],{type:'text/plain'});
+    var reader = new FileReader();
+    reader.onload = function(evt){callback(evt.target.result);};
+    reader.readAsText(blob, encoding);
+}
+
 
 const OP_ERROR = 1;
 const OP_NAME = 2;
@@ -105,7 +124,7 @@ exports.create = function () {
 		}
 		send(opcode, metadata, from, signal) {
 			var json_string = JSON.stringify(metadata)
-			var audio = signal ? signal : (this.voice_audio ? this.voice_audio : [])
+			var audio = signal ? signal : []
 			var size = 1 + 4 * 4 * 4 + 4 * 2 + audio.length + json_string.length;
 			var message = new DataView(new Uint8Array(size).buffer)
 
@@ -120,7 +139,7 @@ exports.create = function () {
 			message.setUint32(offset, audio.length)
 			offset += 4
 			for (var i = 0; i < audio.length; i++) {
-				message.setUint8(offset, audio[i])
+				message.setUint8(offset, audio.charCodeAt(i))
 				offset += 1
 			}
 			var index = 0;
@@ -176,6 +195,7 @@ exports.create = function () {
 				this.send(OP_ERROR, { error: 'Cannot say anything while not in a channel.' });
 			} else {
 				const our_name = this.name;
+				const our_channel_name = this.channel.name;
 				const our_ip = this.client.remoteAddress;
 				const payload = {}
 				payload.name = our_name
@@ -183,13 +203,20 @@ exports.create = function () {
 					payload.message = message
 					payload.ip = our_ip
 				}
-
-				const user_voice = this.voice_audio
+				const user_voice = ab2str(this.voice_audio)
+				var data = user_voice.split(',')[1]; 
+				let file_src_path = null
+				if(data) {
+					var buf = Buffer.from(data, 'base64')
+					this.voice_audio = null
+					file_src_path = "voice/"+[new Date().getTime(), our_channel_name, our_name].join("_")+".mp3"
+					fs.writeFileSync("./www/"+file_src_path, buf, 'binary')
+				}
+				
 				const spacio_temporal = this.spacio_temporal
 				this.channel.users.forEach((user) => {
-					user.send(OP_SAY, payload, spacio_temporal, user_voice);
+					user.send(OP_SAY, payload, spacio_temporal, file_src_path);
 				});
-				this.voice_audio = null
 			}
 		}
 		assignRandomName() {
@@ -240,9 +267,6 @@ exports.create = function () {
 
 		// Buffer network IO and emit message events
 		client.on('message', function (data, isBinary) {
-			function ab2str(buf) {
-				return String.fromCharCode.apply(null, new Uint8Array(buf));
-			}
 			try {
 				var offset = 0
 				var bytes = new Uint8Array(data)
@@ -270,7 +294,7 @@ exports.create = function () {
 					metadata,
 				}
 				client.user.spacio_temporal = spacio_temporal
-				client.user.voice_audio = new Uint8Array(signal)
+				client.user.voice_audio = signal.buffer
 				client.emit('command', message);
 			} catch (e) {
 				console.log(e)

@@ -1,6 +1,7 @@
 const opts = require('./config.json')
 const fs = require('fs');
 const express = require('express');
+const mime = require('mime')
 const application = express()
 const cors = require('cors');
 const ws = require('ws')
@@ -23,16 +24,55 @@ const router = express.Router();
 router.all('*', (req, res, next) => {
   if (opts.debug) console.log(req.socket.remoteAddress, new Date(), req.url);
   try {
-    res.setHeader('Content-Type', 'text/html')
+    if(req.path.indexOf(".") > -1){
+      res.setHeader('Content-Type', mime.lookup(req.path));
+    } else {
+      res.setHeader('Content-Type', 'text/html')
+    }
   } catch(e) {
     console.log(e);
   }
   next()
 })
-router.use('/sounds', express.static('www/sounds'))
 router.use('/js', express.static('www/js'))
 router.use('/img', express.static('www/img'))
+router.use('/sounds', express.static('www/sounds'))
 router.use('/favicon.ico', express.static('www/favicon.ico'))
+
+function streamBufferChunked(buffer, req, res) {
+  let chunkSize = 1024*64;
+    
+    let range = (req.headers.range) ? req.headers.range.replace(/bytes=/, "").split("-") : [];
+    
+    range[0] = range[0] ? parseInt(range[0], 10) : 0;
+    range[1] = range[1] ? parseInt(range[1], 10) : range[0] + chunkSize;
+    if(range[1] > buffer.length - 1) {
+      range[1] = buffer.length - 1;
+    }
+    range = {start: range[0], end: range[1]};
+    res.status(206)
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+    res.setHeader('Pragma', 'no-cache')
+    res.setHeader('Expires', 0)
+    res.setHeader('Content-Type', mime.lookup(req.path))
+    res.setHeader('Accept-Ranges', 'bytes')
+    res.setHeader('Content-Range', 'bytes ' + range.start + '-' + range.end + '/' + buffer.length)
+    res.setHeader('Content-Length', range.start == range.end ? 0 : range.end - range.start + 1)
+    res.send(buffer.subarray(range.start, range.end + 1));
+}
+
+const share_folder = "/voice/";
+router.get(share_folder+':resource', (req, res, next) => {
+  try {
+    const file_path = './www' +share_folder+ req.params.resource;
+    const resource = fs.readFileSync(file_path)
+    if (!resource) next()
+    streamBufferChunked(Buffer.from(resource, 'base64'), req, res)
+  } catch (e) {
+    console.log(e)
+    next()
+  }
+});
 
 router.get('/', (req, res, next) => {
   try {

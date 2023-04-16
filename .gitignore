@@ -3,3 +3,4 @@ package-lock.json
 .DS_Store
 www/.DS_Store
 config.json
+www/voice/*
