@@ -8,8 +8,9 @@ Next, `cd ScienceOrDie.com`
 
 Install dependencies with `npm install`
 
-Optionally run `npm run configure` to configure your server SSL key and certificate paths.
+Optionally: 
+[generate](https://duckduckgo.com/?q=generate+self-signed+certificate+terminal) or [obtain](https://certbot.eff.org/) a SSL key/certificate pair for your domain, then run `npm run configure` to configure your server SSL key and certificate paths.
 
 Run the server with `npm start`
 
-Visit `localhost` in a browser to start playing online!
+Visit `localhost`, your server domain and/or IP in a browser to start playing online!
