@@ -185,13 +185,13 @@ user-scalable=no">
           "width": {
             "type": `EXACT`,
             "value": () => {
-              return 2048
+              return 1024
             }
           },
           "height": {
             "type": `EXACT`,
             "value": () => {
-              return 2048
+              return 1024
             }
           },
           "depth_test": false
@@ -1794,7 +1794,7 @@ void main(void) {
 
     
     const audio_start_time = new Date().getTime();
-    const audio_sample_size = 4096
+    const audio_sample_size = 4096*4
     let audio_last_time = audio_start_time;
     let audio_current_time = 0;
     let audio_samples = []
@@ -1805,6 +1805,7 @@ void main(void) {
     let on_duration_threshold = 2.;
     let max_duration = 8.;
     let sampling_started = false;
+    let mp3encoder = null;
 
     function start_voice_transmit() {
 
@@ -1813,7 +1814,7 @@ void main(void) {
       function transmit() {
         channels = 1; //1 for mono or 2 for stereo
         kbps = 16; //encode 64kbps mp3
-        mp3encoder = new lamejs.Mp3Encoder(channels, state.audio_ctx.sampleRate, kbps);
+        mp3encoder = mp3encoder ? mp3encoder : new lamejs.Mp3Encoder(channels, state.audio_ctx.sampleRate, kbps);
         const mp3Data = [];
 
         sampleBlockSize = Math.min(576 * 4, audio_sample_size); //can be anything but make it a multiple of 576 to make encoders life easier
@@ -2031,7 +2032,7 @@ void main(void) {
       last_touch_start: -1.,
       double_tap_threshold: 1. / 3.,
       firing: false,
-      max_firing_rate: init_firing_rate / 8,
+      max_firing_rate: init_firing_rate / 4,
       camera_position: [0., init_scalar * 100, 0],
       words_mesh_indices: [],
       words_mesh_vertices: [],
@@ -2325,7 +2326,7 @@ void main(void) {
             hit = true;
             var midpoint = glMatrix.vec3.add(glMatrix.vec3.create(), powerup.position, object.position)
             midpoint = glMatrix.vec3.scale(midpoint, midpoint, 1. / 2.)
-            if (state.user.health > 0) {
+            if (object.name == state.user.name && state.user.health > 0) {
               if (powerup.is_health) {
                 state.user.health += init_health / 4;
                 state.user.health = Math.min(state.user.health, init_health * 2)
