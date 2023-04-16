@@ -1,4 +1,10 @@
-const opts = require('./config.json')
+let opts;
+try {
+  opts = require('./config.json');
+} catch (error) {
+  console.warn("No ssl set. Please run `node configure.js`!")
+  opts = {};    
+}
 const fs = require('fs');
 const express = require('express');
 const mime = require('mime')
@@ -16,9 +22,6 @@ opts["ssl"] = ssl ? {
   "cert": fs.readFileSync(opts["ssl"].cert),
 } : opts["ssl"];
 
-if (!opts["ssl"]) {
-  console.warn("No ssl set. Please run `node configure.js`!")
-}
 const router = express.Router();
 
 router.all('*', (req, res, next) => {

@@ -16,8 +16,6 @@ try {
     new_opts = {};    
 }
 
-const { hostname } = require('os');
-
 function generate() {
     console.log("Generating ./config.json\n...")
     fs.writeFileSync('./config.json', new_opts);
@@ -48,11 +46,7 @@ function prompt_ssl() {
                 cert: !cert && new_opts.ssl ? new_opts.ssl.cert : cert,
                 key: !key && new_opts.ssl ? new_opts.ssl.key : key
             }
-            const h_correct = "What is your server hostname (ENTER for '"+hostname+"')?\n"
-            rl.question(h_correct, function (host) {
-                new_opts.server_hostname = (host ? host : hostname) +""
-                prompt_correct();
-            });
+            prompt_correct();
         });
     });
 }

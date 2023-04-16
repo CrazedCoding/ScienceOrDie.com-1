@@ -8,7 +8,7 @@ Next, `cd ScienceOrDie.com`
 
 Install dependencies with `npm install`
 
-Optionally run `npm run configure` to configure your server SSL and hostname.
+Optionally run `npm run configure` to configure your server SSL key and certificate paths.
 
 Run the server with `npm start`
 
